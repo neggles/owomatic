@@ -16,11 +16,11 @@ from owomatic.helpers.misc import get_package_root
 
 PACKAGE_ROOT = get_package_root()
 
-BOT_INTENTS = Intents.all()
-BOT_INTENTS.members = True
+BOT_INTENTS = Intents.default()
+BOT_INTENTS.members = False
 BOT_INTENTS.presences = False
 BOT_INTENTS.typing = False
-BOT_INTENTS.message_content = False
+BOT_INTENTS.message_content = True
 
 
 logger = logging.getLogger(__package__)

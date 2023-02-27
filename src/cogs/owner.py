@@ -135,6 +135,14 @@ class Owner(commands.Cog, name="owner"):
             await inter.send(embed=embed)
             print(exception)
 
+    @commands.slash_command(
+        name="send",
+    )
+    @checks.is_owner()
+    async def send(self, inter: ApplicationCommandInteraction, message: str):
+        await inter.channel.send(message)
+        await inter.send("Message sent!", ephemeral=True)
+
 
 def setup(bot):
     bot.add_cog(Owner(bot))
