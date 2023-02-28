@@ -43,7 +43,7 @@ def has_owo(message: Message) -> bool:
 class Owo(commands.Cog, name="template-slash"):
     def __init__(self, bot: Owomatic):
         self.bot = bot
-        self.owo_pool = OWO_VAULT
+        self.owo_pool = OWO_VAULT.copy()
 
     async def cog_load(self) -> None:
         logger.info("owo? what's this?")
@@ -56,7 +56,7 @@ class Owo(commands.Cog, name="template-slash"):
         # if we only have one option left, use that and reset the pool
         if len(self.owo_pool) == 1:
             owo = self.owo_pool[0]
-            self.owo_pool = OWO_VAULT
+            self.owo_pool = OWO_VAULT.copy()
         else:  # get a random owo from the pool and remove it from the pool
             owo = random_choice(self.owo_pool)
             self.owo_pool.remove(owo)
