@@ -64,7 +64,7 @@ class OwoVault:
         notices = False
         if any(owo in msg_text for owo in self._OwO):
             notices = True
-        elif any(owo in msg_text.replace(" ", "") for owo in self._OwO):
+        elif any(owo in msg_text.replace(" ", "") for owo in self._OwO if owo != "ono"):
             logger.debug(f"non-standard owo detected! {author} thinks they're funny: '{message.content}'")
             notices = True
         elif any(owo in msg_unfucked.replace(" ", "") for owo in self._OwO):
@@ -106,6 +106,9 @@ class Owo(commands.Cog, name="template-slash"):
         if (message.author.bot is True) or (message.author == self.bot.user):
             return
 
+        if message.content.startswith("```"):
+            return
+
         if self.vault.check(message):
             logger.info("owo!")
             if message.channel.id in self.owo_allow:
@@ -117,7 +120,7 @@ class Owo(commands.Cog, name="template-slash"):
                     logger.info("oh now you've done it, champ")
                     await self.youre_dead_kiddo(message)
                 await self.send_owo(message)
-            elif message.channel.id in self.owo_maybe and randrange(0, 3) == 1:
+            elif message.channel.id in self.owo_maybe and randrange(0, 9) == 7:
                 await self.send_owo(message)
             else:
                 logger.info("nowo :(")
