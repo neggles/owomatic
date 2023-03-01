@@ -23,7 +23,7 @@ logging.root = logsnake.setup_logger(
     isRootLogger=True,
     formatter=logfmt,
     logfile=LOGDIR_PATH.joinpath(f"{__package__}_debug.log"),
-    fileLoglevel=logging.DEBUG,
+    fileLoglevel=logging.INFO,
     maxBytes=2 * MBYTE,
     backupCount=5,
 )

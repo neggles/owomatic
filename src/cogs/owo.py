@@ -1,16 +1,19 @@
+import json
 import logging
 from asyncio import sleep as async_sleep
-from random import choice as random_choice, randrange as random_range
+from os import PathLike
+from pathlib import Path
+from random import choice, randrange, shuffle
 
 from disnake import Message
 from disnake.ext import commands
 
 from owomatic.bot import Owomatic
+from owomatic.helpers.deowo import deOwOify, realspace
+
+OWO_JSON = Path(__file__).parent.joinpath("data", "owo.json")
 
 logger = logging.getLogger(__package__)
-
-OWO_VAULT = ["◕w◕", "σωσ", "◔w◔", "♥w♥", "𝓞𝔀𝓞", "𝙤𝙬𝙤", "uωu", "UωU", "OωO", "oωo", "OωO", "oωo"]
-OWO_SENSE = ["owo", "uwu"]
 
 NAVY_SEAL = [
     "What the fuck did you just fucking say about me, you little bitch?",
@@ -28,39 +31,64 @@ NAVY_SEAL = [
 ]
 
 
-def has_owo(message: Message) -> bool:
-    msg_text = message.content.lower()
-    owo = False
-    if any(owo in msg_text for owo in OWO_SENSE):
-        owo = True
-    if any(owo in msg_text.replace(" ", "") for owo in OWO_SENSE):
+class OwoVault:
+    def __init__(self):
+        # load the owo data
+        owodata: dict = json.loads(OWO_JSON.read_text())
+
+        # make into some props
+        owos = owodata.get("owos", [])
+        uwus = owodata.get("uwus", [])
+
+        self._OwO: list[str] = owos + uwus
+        self._vault = self.OwO
+
+    @property
+    def OwO(self):
+        return self._OwO.copy()
+
+    def refresh(self):
+        if len(self._vault) == 0:
+            self._vault = self.OwO
+        shuffle(self._vault)
+
+    def get(self):
+        self.refresh()
+        return self._vault.pop()
+
+    def check(self, message: Message) -> bool:
+        msg_text = realspace(message.content).lower()
+        msg_unfucked = deOwOify(msg_text)
         author = f"{message.author.name}#{message.author.discriminator}"
-        logger.warn(f"non-standard owo detected! {author} thinks they're funny: '{message.content}'")
-        owo = True
-    return owo
+
+        notices = False
+        if any(owo in msg_text for owo in self._OwO):
+            notices = True
+        elif any(owo in msg_text.replace(" ", "") for owo in self._OwO):
+            logger.debug(f"non-standard owo detected! {author} thinks they're funny: '{message.content}'")
+            notices = True
+        elif any(owo in msg_unfucked.replace(" ", "") for owo in self._OwO):
+            logger.debug(f"LISTEN HERE YOU LITTLE SHIT. {author} thinks they're funny: '{message.content}'")
+            notices = True
+        return notices
 
 
 class Owo(commands.Cog, name="template-slash"):
     def __init__(self, bot: Owomatic):
         self.bot = bot
-        self.owo_pool = OWO_VAULT.copy()
+        self.vault: OwoVault = None
+        self.owo_allow: list[int] = self.bot.config["owo_channels"]["allowed"]
+        self.owo_maybe: list[int] = self.bot.config["owo_channels"]["cooldown"]
 
     async def cog_load(self) -> None:
-        logger.info("owo? what's this?")
+        logger.info(f"OwO what's this?")
+        self.vault = OwoVault()
+        logger.info(f"{self.vault.get()} is ready to go!!")
         return await super().cog_load()
 
     async def cog_unload(self) -> None:
+        logger.info("oh nowo? bye bye!")
         return await super().cog_unload()
-
-    def get_owo(self):
-        # if we only have one option left, use that and reset the pool
-        if len(self.owo_pool) == 1:
-            owo = self.owo_pool[0]
-            self.owo_pool = OWO_VAULT.copy()
-        else:  # get a random owo from the pool and remove it from the pool
-            owo = random_choice(self.owo_pool)
-            self.owo_pool.remove(owo)
-        return owo
 
     async def youre_dead_kiddo(self, message: Message):
         replied = False
@@ -78,16 +106,24 @@ class Owo(commands.Cog, name="template-slash"):
         if (message.author.bot is True) or (message.author == self.bot.user):
             return
 
-        if has_owo(message):
+        if self.vault.check(message):
             logger.info("owo!")
-            if random_range(0, 420) == 69 or (
-                "fight me" in message.content.lower()
-                and message.author.id == self.bot.owner_id
-                and self.bot.user in message.mentions
-            ):
-                logger.info("oh now you've done it, champ")
-                await self.youre_dead_kiddo(message)
-            await message.channel.send(self.get_owo())
+            if message.channel.id in self.owo_allow:
+                if randrange(0, 420) == 69 or (
+                    "fight me" in message.content.lower()
+                    and message.author.id == self.bot.owner_id
+                    and self.bot.user in message.mentions
+                ):
+                    logger.info("oh now you've done it, champ")
+                    await self.youre_dead_kiddo(message)
+                await self.send_owo(message)
+            elif message.channel.id in self.owo_maybe and randrange(0, 3) == 1:
+                await self.send_owo(message)
+            else:
+                logger.info("nowo :(")
+
+    async def send_owo(self, message: Message):
+        await message.channel.send(self.vault.get())
 
 
 def setup(bot):
