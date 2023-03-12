@@ -1,25 +1,41 @@
+import json
 import logging
 import os
 import platform
 import random
 import sys
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
+from functools import partial as partial_func
 from pathlib import Path
 from traceback import print_exception
 from zoneinfo import ZoneInfo
 
-import disnake
-from disnake import ApplicationCommandInteraction, Intents
+from disnake import (
+    Activity,
+    ActivityType,
+    ApplicationCommandInteraction,
+    Embed,
+    Guild,
+    Intents,
+    InteractionResponseType,
+    Message,
+)
+from disnake import __version__ as DISNAKE_VERSION
 from disnake.ext import commands, tasks
+from humanize import naturaldelta as fuzzydelta
 
 import exceptions
+from owomatic import COGDIR_PATH, DATADIR_PATH, USERDATA_PATH
+from owomatic.embeds import CooldownEmbed, MissingPermissionsEmbed
 from owomatic.helpers.misc import get_package_root
 
 PACKAGE_ROOT = get_package_root()
 
 BOT_INTENTS = Intents.default()
+BOT_INTENTS.typing = False
 BOT_INTENTS.members = False
 BOT_INTENTS.presences = False
-BOT_INTENTS.typing = False
 BOT_INTENTS.message_content = True
 
 
@@ -36,30 +52,105 @@ class Owomatic(commands.Bot):
         # attributes set up in cli.py. this is a dumb way to do this but it works
         self.config: dict = None
         self.timezone: ZoneInfo = None
-        self.datadir_path: Path = None
-        self.userdata_path: Path = None
+        self.datadir_path: Path = DATADIR_PATH
+        self.userdata_path: Path = USERDATA_PATH
         self.userdata: dict = None
-        self.cogdir_path: Path = None
-        self.extdir_path: Path = None
+        self.cogdir_path: Path = COGDIR_PATH
+        self.start_time: datetime = datetime.now(tz=ZoneInfo("UTC"))
+        self.home_guild: Guild = None  # set in on_ready
+
+        # thread pool for blocking code
+        self.executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="bot")
+
+    @property
+    def uptime(self) -> timedelta:
+        return datetime.now(tz=ZoneInfo("UTC")) - self.start_time
+
+    @property
+    def fuzzyuptime(self) -> str:
+        return fuzzydelta(self.uptime)
+
+    async def do(self, func, *args, **kwargs):
+        funcname = getattr(func, "__name__", None)
+        if funcname is None:
+            funcname = getattr(func.__class__, "__name__", "unknown")
+        logger.info(f"Running {funcname} in background thread...")
+        return await self.loop.run_in_executor(self.executor, partial_func(func, *args, **kwargs))
+
+    def save_userdata(self):
+        if self.userdata is not None and self.userdata_path.is_file():
+            with self.userdata_path.open("w") as f:
+                json.dump(self.userdata, f, skipkeys=True, indent=2)
+            logger.debug("Flushed user states to disk")
+
+    def load_userdata(self):
+        if self.userdata_path.is_file():
+            with self.userdata_path.open("r") as f:
+                self.userdata = json.load(f)
+            logger.debug("Loaded user states from disk")
+
+    def save_guild_metadata(self, guild_id: int):
+        # get guild metadata (members, channels, etc.)
+        guild = self.get_guild(guild_id)
+        guild_data = {
+            "id": guild.id,
+            "name": guild.name,
+            "member_count": guild.member_count,
+            "description": guild.description,
+            "created_at": guild.created_at.isoformat(),
+            "nsfw_level": guild.nsfw_level.name,
+            "members": [
+                {
+                    "id": member.id,
+                    "name": member.name,
+                    "discriminator": member.discriminator,
+                    "display_name": member.display_name,
+                    "avatar": str(member.avatar.url) if member.avatar else None,
+                    "is_bot": member.bot,
+                    "is_system": member.system,
+                }
+                for member in guild.members
+            ],
+            "channels": [
+                {
+                    "id": channel.id,
+                    "name": channel.name,
+                    "category": (
+                        {"id": channel.category_id, "name": channel.category.name} if channel.category else {}
+                    ),
+                    "position": channel.position,
+                }
+                for channel in guild.channels
+            ],
+        }
+
+        # save member_data
+        guild_data_path = self.datadir_path.joinpath("guilds", f"{guild_id}-meta.json")
+        guild_data_path.parent.mkdir(exist_ok=True, parents=True)
+        with guild_data_path.open("w") as f:
+            json.dump(guild_data, f, skipkeys=True, indent=2)
 
     def available_cogs(self):
-        return [
+        cogs = [
             f.stem
             for f in self.cogdir_path.glob("*.py")
             if f.stem != "template" and not f.stem.endswith("_wip")
         ]
+        if isinstance(self.config.get("disable_cogs", None), list):
+            cogs = [x for x in cogs if x not in self.config["disable_cogs"]]
+        return cogs
 
-    def load_cogs(self, override: bool = False):
+    def load_cogs(self):
         cogs = self.available_cogs()
         if cogs:
             for cog in cogs:
                 try:
                     self.load_extension(f"cogs.{cog}")
                     logger.info(f"Loaded cog '{cog}'")
-                except Exception:
+                except Exception as e:
                     etype, exc, tb = sys.exc_info()
                     exception = f"{etype}: {exc}"
-                    logger.error(f"Failed to load extension {cog}:\n{exception}")
+                    logger.error(f"Failed to load cog {cog}:\n{exception}")
                     print_exception(etype, exc, tb)
         else:
             logger.info("No cogs found")
@@ -70,7 +161,7 @@ class Owomatic(commands.Bot):
         Set up the bot's status task
         """
         statuses = self.config["statuses"]
-        activity = disnake.Activity(name=random.choice(statuses), type=disnake.ActivityType.playing)
+        activity = Activity(name=random.choice(statuses), type=ActivityType.playing)
         await self.change_presence(activity=activity)
 
     @status_task.before_loop
@@ -78,123 +169,98 @@ class Owomatic(commands.Bot):
         print("waiting...")
         await self.wait_until_ready()
 
+    @tasks.loop(minutes=3.0)
+    async def userdata_task(self) -> None:
+        """
+        Background task to flush user state to disk
+        """
+        self.save_userdata()
+        logger.debug("Flushed userdata to disk")
+
     async def on_ready(self) -> None:
         """
         The code in this even is executed when the bot is ready
         """
         logger.info(f"Logged in as {self.user.name}")
-        logger.info(f"disnake API version: {disnake.__version__}")
+        logger.info(f"disnake API version: {DISNAKE_VERSION}")
         logger.info(f"Python version: {platform.python_version()}")
         logger.info(f"Running on: {platform.system()} {platform.release()} ({os.name})")
         logger.info("-------------------")
+        if self.home_guild is None:
+            if self.config.get("home_guild_id", None) is None:
+                logger.error("No home guild found, please specify one in config.json")
+            else:
+                logger.info("Saving home guild metadata to disk")
+                self.home_guild = self.get_guild(self.config.get("home_guild_id", None))
+                self.save_guild_metadata(self.home_guild.id)
         if not self.status_task.is_running():
             self.status_task.start()
+        if not self.userdata_task.is_running():
+            self.userdata_task.start()
 
-    async def on_message(self, message: disnake.Message) -> None:
-        """
-        The code in this event is executed every time someone sends a message, with or without the prefix
-        :param message: The message that was sent.
-        """
+    async def on_message(self, message: Message) -> None:
         if message.author == self.user or message.author.bot:
             return
-
         await self.process_commands(message)
 
-    async def on_slash_command(self, interaction: ApplicationCommandInteraction) -> None:
-        """
-        The code in this event is executed every time a slash command has been *successfully* executed
-        :param interaction: The slash command that has been executed.
-        """
+    async def on_slash_command(self, ctx: ApplicationCommandInteraction) -> None:
         logger.info(
-            f"Executed {interaction.data.name} command in {interaction.guild.name} (ID: {interaction.guild.id}) by {interaction.author} (ID: {interaction.author.id})"
+            f"Executed {ctx.data.name} command in {ctx.guild.name} (ID: {ctx.guild.id}) by {ctx.author} (ID: {ctx.author.id})"
         )
 
-    async def on_slash_command_error(interaction: ApplicationCommandInteraction, error: Exception) -> None:
-        """
-        The code in this event is executed every time a valid slash command catches an error
-        :param interaction: The slash command that failed executing.
-        :param error: The error that has been faced.
-        """
-        if isinstance(error, exceptions.UserBlacklisted):
-            """
-            The code here will only execute if the error is an instance of 'UserBlacklisted', which can occur when using
-            the @checks.is_owner() check in your command, or you can raise the error by yourself.
-
-            'hidden=True' will make so that only the user who execute the command can see the message
-            """
-            embed = disnake.Embed(
-                title="Error!", description="You are blacklisted from using the bot.", color=0xE02B2B
-            )
-            logger.info("A blacklisted user tried to execute a command.")
-            return await interaction.send(embed=embed, ephemeral=True)
-        elif isinstance(error, commands.errors.MissingPermissions):
-            embed = disnake.Embed(
-                title="Error!",
-                description="You are missing the permission(s) `"
-                + ", ".join(error.missing_permissions)
-                + "` to execute this command!",
-                color=0xE02B2B,
-            )
-            logger.info("A blacklisted user tried to execute a command.")
-            return await interaction.send(embed=embed, ephemeral=True)
-        else:
-            logger.error(f"An error occurred while executing a slash command: {error}")
-            embed = disnake.Embed(
-                title="Error!",
-                description=f"An error occurred while executing the command: {str(error).capitalize()}",
-                color=0xE02B2B,
-            )
-            await interaction.send(embed=embed, ephemeral=True)
-        raise error
-
-    async def on_command_completion(context: commands.Context) -> None:
-        """
-        The code in this event is executed every time a normal command has been *successfully* executed
-        :param context: The context of the command that has been executed.
-        """
-        full_command_name = context.command.qualified_name
-        split = full_command_name.split(" ")
-        executed_command = str(split[0])
-        logger.info(
-            f"Executed {executed_command} command in {context.guild.name} (ID: {context.message.guild.id}) by {context.message.author} (ID: {context.message.author.id})"
-        )
-
-    async def on_command_error(context: commands.Context, error) -> None:
-        """
-        The code in this event is executed every time a normal valid command catches an error
-        :param context: The normal command that failed executing.
-        :param error: The error that has been faced.
-        """
+    async def on_slash_command_error(self, ctx: ApplicationCommandInteraction, error) -> None:
         if isinstance(error, commands.CommandOnCooldown):
-            minutes, seconds = divmod(error.retry_after, 60)
-            hours, minutes = divmod(minutes, 60)
-            hours = hours % 24
-            embed = disnake.Embed(
-                title="Hey, please slow down!",
-                description=f"You can use this command again in {f'{round(hours)} hours' if round(hours) > 0 else ''} {f'{round(minutes)} minutes' if round(minutes) > 0 else ''} {f'{round(seconds)} seconds' if round(seconds) > 0 else ''}.",
+            logger.info(
+                f"User {ctx.author} attempted to use {ctx.application_command.qualified_name} on cooldown."
+            )
+            embed = CooldownEmbed(error.retry_after + 1, ctx.author)
+            return await ctx.send(embed=embed, ephemeral=True)
+
+        elif isinstance(error, exceptions.UserBlacklisted):
+            logger.info(
+                f"User {ctx.author} attempted to use {ctx.application_command.qualified_name}, but is blacklisted."
+            )
+            embed = Embed(
+                title="Error!",
+                description="You have been blacklisted and cannot use this bot. If you think this is a mistake, please contact the bot owner.",
                 color=0xE02B2B,
             )
-            await context.send(embed=embed, delete_after=5.0)
+            return await ctx.send(embed=embed, ephemeral=True)
+
+        elif isinstance(error, exceptions.UserNotOwner):
+            embed = Embed(
+                title="Error!",
+                description="This command requires admin permissions. soz bb xoxo <3",
+                color=0xE02B2B,
+            )
+            logger.warn(
+                f"User {ctx.author} attempted to execute {ctx.application_command.qualified_name} without admin permissions."
+            )
+            return await ctx.send(embed=embed, ephemeral=True)
+
         elif isinstance(error, commands.MissingPermissions):
-            embed = disnake.Embed(
-                title="Error!",
-                description="You are missing the permission(s) `"
-                + ", ".join(error.missing_permissions)
-                + "` to execute this command!",
-                color=0xE02B2B,
+            logger.warn(
+                f"User {ctx.author} attempted to execute {ctx.application_command.qualified_name} without authorization."
             )
-            await context.send(embed=embed, delete_after=5.0)
-        elif isinstance(error, commands.MissingRequiredArgument):
-            embed = disnake.Embed(
-                title="Error!",
-                # We need to capitalize because the command arguments have no capital letter in the code.
-                description=str(error).capitalize(),
-                color=0xE02B2B,
-            )
-            await context.send(embed=embed, delete_after=5.0)
-        elif isinstance(error, commands.CommandNotFound):
-            # This is actually fine so lets just pretend everything is okay.
-            return
-        else:
-            logger.warn(f"An error occurred while executing a command: {error}")
-            raise error
+            embed = MissingPermissionsEmbed(ctx.author, error.missing_permissions)
+            return await ctx.send(embed=embed, ephemeral=True)
+
+        # that covers all the usual errors, so let's catch the rest
+        # first work out if we've deferred the response so we can send an ephemeral message if we need to
+        ctx_rtype = getattr(ctx.response, "_response_type", None)
+        ctx_ephemeral = (
+            True
+            if (ctx_rtype == InteractionResponseType.deferred_channel_message)
+            or (ctx_rtype == InteractionResponseType.deferred_message_update)
+            else False
+        )
+
+        embed = Embed(
+            title="Error!",
+            description="An unknown error occurred while executing this command. Please try again later or contact the bot owner if the problem persists.",
+            color=0xE02B2B,
+        )
+        await ctx.send(embed=embed, ephemeral=ctx_ephemeral)
+
+        logger.warn(f"Unhandled error in slash command {ctx}: {error}")
+        raise error
