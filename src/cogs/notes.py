@@ -28,7 +28,7 @@ class Notes(commands.Cog, name=COG_UID):
     def __init__(self, bot: Owomatic):
         self.bot: Owomatic = bot
 
-    @commands.group(name="note", description="Commands for managing notes.")
+    @commands.slash_command(name="note", description="Commands for managing notes.")
     @checks.not_blacklisted()
     async def notes_group(self, ctx: ApplicationCommandInteraction):
         pass
