@@ -5,6 +5,7 @@ import disnake
 from disnake import ApplicationCommandInteraction, Option, OptionType
 from disnake.ext import commands
 
+from owomatic import BLACKLIST_PATH
 from owomatic.helpers import checks, json_manager
 
 logger = logging.getLogger(__package__)
@@ -13,6 +14,7 @@ logger = logging.getLogger(__package__)
 class Owner(commands.Cog, name="owner"):
     def __init__(self, bot: commands.Bot):
         self.bot: commands.Bot = bot
+        self.blacklist_file = BLACKLIST_PATH
 
     @commands.slash_command(
         name="shutdown",
@@ -62,7 +64,7 @@ class Owner(commands.Cog, name="owner"):
         """
         try:
             user_id = user.id
-            with open("blacklist.json") as file:
+            with self.blacklist_file.open() as file:
                 blacklist = json.load(file)
             if user_id in blacklist["ids"]:
                 embed = disnake.Embed(
@@ -77,7 +79,7 @@ class Owner(commands.Cog, name="owner"):
                 description=f"**{user.name}** has been successfully added to the blacklist",
                 color=0x9C84EF,
             )
-            with open("blacklist.json") as file:
+            with self.blacklist_file.open() as file:
                 blacklist = json.load(file)
             embed.set_footer(text=f"There are now {len(blacklist['ids'])} users in the blacklist")
             await inter.send(embed=embed)
@@ -117,7 +119,7 @@ class Owner(commands.Cog, name="owner"):
                 description=f"**{user.name}** has been successfully removed from the blacklist",
                 color=0x9C84EF,
             )
-            with open("blacklist.json") as file:
+            with self.blacklist_file.open() as file:
                 blacklist = json.load(file)
             embed.set_footer(text=f"There are now {len(blacklist['ids'])} users in the blacklist")
             await inter.send(embed=embed)
