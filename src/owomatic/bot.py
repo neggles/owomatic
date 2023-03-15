@@ -196,6 +196,8 @@ class Owomatic(commands.Bot):
         if not self.status_task.is_running():
             self.status_task.start()
         if not self.userdata_task.is_running():
+            if self.userdata is None:
+                self.load_userdata()
             self.userdata_task.start()
 
     async def on_message(self, message: Message) -> None:
