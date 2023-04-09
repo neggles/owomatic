@@ -11,6 +11,8 @@ from disnake.ext import commands
 from owomatic.bot import Owomatic
 from owomatic.helpers.deowo import deOwOify, realspace
 
+COG_UID = "owo"
+
 OWO_JSON = Path(__file__).parent.joinpath("data", "owo.json")
 
 logger = logging.getLogger(__package__)
@@ -91,7 +93,7 @@ class OwoVault:
         return notices
 
 
-class Owo(commands.Cog, name="template-slash"):
+class Owo(commands.Cog, name=COG_UID):
     def __init__(self, bot: Owomatic):
         self.bot = bot
         self.vault: OwoVault = None

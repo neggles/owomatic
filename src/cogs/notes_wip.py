@@ -46,13 +46,13 @@ class Notes(commands.Cog, name=COG_UID):
         :param name: Name of the note.
         :param note: Content of the note.
         """
-        user_notes = self.bot.get_userdata_key(ctx.author.id, "notes", {})
+        user_notes = self.bot.get_userdata_key(ctx.author, "notes", {})
         if name in user_notes.keys():
             await ctx.send(f"Note with name `{name}` already exists.", ephemeral=True)
             return
 
         user_notes[name] = note
-        self.bot.set_userdata_key(ctx.author.id, "notes", user_notes)
+        self.bot.set_userdata_key(ctx.author, "notes", user_notes)
 
         embed = Embed(
             title="Note added",
@@ -73,13 +73,13 @@ class Notes(commands.Cog, name=COG_UID):
         :param ctx: The application command interaction.
         :param name: Name of the note.
         """
-        user_notes = self.bot.get_userdata_key(ctx.author.id, "notes", {})
+        user_notes = self.bot.get_userdata_key(ctx.author, "notes", {})
         if name not in user_notes.keys():
             await ctx.send(f"Note with name `{name}` does not exist.", ephemeral=True)
             return
 
         user_notes.pop(name)
-        self.bot.set_userdata_key(ctx.author.id, "notes", user_notes)
+        self.bot.set_userdata_key(ctx.author, "notes", user_notes)
 
         embed = Embed(
             title="Note removed",
@@ -94,7 +94,7 @@ class Notes(commands.Cog, name=COG_UID):
         self,
         ctx: ApplicationCommandInteraction,
     ):
-        user_notes = self.bot.get_userdata_key(ctx.author.id, "notes", {})
+        user_notes = self.bot.get_userdata_key(ctx.author, "notes", {})
         if len(user_notes.keys()) == 0:
             await ctx.send("You have no notes.", ephemeral=True)
             return
@@ -124,7 +124,7 @@ class Notes(commands.Cog, name=COG_UID):
         :param ctx: The application command interaction.
         :param name: Name of the note.
         """
-        user_notes = self.bot.get_userdata_key(ctx.author.id, "notes", {})
+        user_notes = self.bot.get_userdata_key(ctx.author, "notes", {})
         if name not in user_notes.keys():
             await ctx.send(f"Note with name `{name}` does not exist.", ephemeral=True)
             return
