@@ -21,6 +21,7 @@ from disnake import (
     InteractionResponseType,
     Message,
     Member,
+    Status,
 )
 from disnake import __version__ as DISNAKE_VERSION
 from disnake.ext import commands, tasks
@@ -59,6 +60,7 @@ class Owomatic(commands.Bot):
         self.cogdir_path: Path = COGDIR_PATH
         self.start_time: datetime = datetime.now(tz=ZoneInfo("UTC"))
         self.home_guild: Guild = None  # set in on_ready
+        self.hide: bool = False
 
         # thread pool for blocking code
         self.executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="bot")
@@ -186,8 +188,13 @@ class Owomatic(commands.Bot):
 
     @status_task.before_loop
     async def before_status_task(self):
-        print("waiting...")
-        await self.wait_until_ready()
+        if self.hide:
+            # no status task if we're hiding
+            await self.change_presence(status=Status.invisible)
+            self.status_task.cancel()
+        else:
+            print("waiting...")
+            await self.wait_until_ready()
 
     @tasks.loop(minutes=3.0)
     async def userdata_task(self) -> None:
@@ -213,8 +220,13 @@ class Owomatic(commands.Bot):
                 logger.info("Saving home guild metadata to disk")
                 self.home_guild = self.get_guild(self.config.get("home_guild_id", None))
                 self.save_guild_metadata(self.home_guild.id)
-        if not self.status_task.is_running():
-            self.status_task.start()
+
+        if self.hide is False:
+            if not self.status_task.is_running():
+                self.status_task.start()
+        else:
+            await self.change_presence(status=Status.invisible)
+
         if not self.userdata_task.is_running():
             if self.userdata is None:
                 self.load_userdata()

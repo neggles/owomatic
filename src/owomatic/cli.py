@@ -23,18 +23,18 @@ logging.root = logsnake.setup_logger(
     isRootLogger=True,
     formatter=logfmt,
     logfile=LOGDIR_PATH.joinpath(f"{__package__}_debug.log"),
-    fileLoglevel=logging.INFO,
+    fileLoglevel=logging.DEBUG,
     maxBytes=2 * MBYTE,
     backupCount=5,
 )
 # setup package logger
 logger = logsnake.setup_logger(
-    level=logging.INFO,
+    level=logging.DEBUG,
     isRootLogger=False,
     name=__package__,
     formatter=logfmt,
     logfile=LOGDIR_PATH.joinpath(f"{__package__}.log"),
-    fileLoglevel=logging.INFO,
+    fileLoglevel=logging.DEBUG,
     maxBytes=2 * MBYTE,
     backupCount=5,
 )
@@ -112,7 +112,8 @@ def cli(ctx: click.Context):
     bot.userdata_path = USERDATA_PATH
     bot.cogdir_path = COGDIR_PATH
     bot.userdata = userdata
-    bot.reload = config["reload"]
+    bot.reload = config.get("reload", False)
+    bot.hide = config.get("hide", False)
 
     bot.load_cogs()
 
