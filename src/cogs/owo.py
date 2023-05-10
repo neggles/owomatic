@@ -1,7 +1,6 @@
 import json
 import logging
 from asyncio import sleep as async_sleep
-from os import PathLike
 from pathlib import Path
 from random import choice, randrange, shuffle
 
