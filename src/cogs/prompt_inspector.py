@@ -88,7 +88,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
             for i, attachment in enumerate(message.attachments):
                 metadata = OrderedDict()
                 await read_attachment_metadata(i, attachment, metadata)
-                if metadata is not None:
+                if len(metadata.keys()) > 0:
                     await message.add_reaction(TRIGGER_EMOJI)
                     break
 
