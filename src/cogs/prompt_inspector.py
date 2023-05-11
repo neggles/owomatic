@@ -180,7 +180,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
 def dict2embed(data: dict, context: Message) -> Embed:
     embed = Embed(color=context.author.color)
     for key, val in data.items():
-        embed.add_field(name=key, value=val, inline="Prompt" not in key)
+        embed.add_field(name=key, value=f"`{val}`", inline="Prompt" not in key)
     embed.set_footer(text=f"Posted by {context.author}", icon_url=context.author.display_avatar.url)
     return embed
 
