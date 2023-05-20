@@ -1,3 +1,4 @@
+from functools import lru_cache
 import gzip
 import json
 import logging
@@ -7,6 +8,7 @@ from io import BytesIO
 from typing import List, Optional
 
 import logsnake
+from async_lru import alru_cache
 from disnake import (
     Attachment,
     ButtonStyle,
@@ -81,7 +83,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
     @commands.Cog.listener("on_message")
     async def on_message(self, message: Message):
         # ignore bots and self
-        if (message.author.bot is True) or (message.author == self.bot.user):
+        if message.author == self.bot.user:
             return
         # monitor only channels in the config
         if message.channel.id in self.channel_ids and message.attachments:
@@ -297,6 +299,7 @@ def read_info_from_image_stealth(image: Image.Image):
     return None
 
 
+@lru_cache(maxsize=128)
 def get_params_from_string(param_str: str) -> dict:
     logger.debug(f"Parsing parameters from string: {param_str}")
     output_dict = {}
@@ -323,6 +326,7 @@ def get_params_from_string(param_str: str) -> dict:
     return output_dict
 
 
+@alru_cache(maxsize=128)
 async def read_attachment_metadata(idx: int, attachment: Attachment, metadata: OrderedDict):
     """Allows downloading in bulk"""
     try:
