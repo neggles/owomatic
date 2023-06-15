@@ -1,8 +1,12 @@
 from random import choice as random_choice
-from typing import Union
+from typing import List, Union
 
 from disnake import Colour, Embed, File, Member, User
-from disnake.ext.commands import CommandNotFound, MissingPermissions, MissingRequiredArgument
+from disnake.ext.commands import (
+    CommandNotFound,
+    MissingPermissions,
+    MissingRequiredArgument,
+)
 from humanize import naturaldelta as fuzzydelta
 
 from owomatic import DATADIR_PATH
