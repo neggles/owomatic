@@ -1,9 +1,9 @@
-from functools import lru_cache
 import gzip
 import json
 import logging
 from asyncio import gather
 from collections import OrderedDict
+from functools import lru_cache
 from typing import List, Optional
 
 from disnake import (
@@ -15,12 +15,13 @@ from disnake import (
     MessageInteraction,
     RawReactionActionEvent,
 )
-import logsnake
 from disnake.ext import commands
 from disnake.ui import Button, View, button
+from PIL import Image
+
+import logsnake
 from owomatic import DATADIR_PATH, LOG_FORMAT, LOGDIR_PATH
 from owomatic.bot import Owomatic
-from PIL import Image
 
 COG_UID = "prompt-inspector"
 
