@@ -34,13 +34,14 @@ TRIGGER_EMOJI = "🔎"
 logger = logsnake.setup_logger(
     level=logging.DEBUG,
     isRootLogger=False,
-    name=COG_UID,
+    name=__name__,
     formatter=logsnake.LogFormatter(fmt=LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S"),
     logfile=LOGDIR_PATH.joinpath(f"{COG_UID}.log"),
     fileLoglevel=logging.DEBUG,
     maxBytes=2 * (2**20),
     backupCount=2,
 )
+logger.propagate = True
 
 
 class PromptView(View):
@@ -142,7 +143,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
         attachments = [a for a in message.attachments if a.filename.lower().endswith(".png")]
         if not attachments:
             logger.debug(f"No PNG attachments found on message {message.id}")
-            await ctx.edit_original_response("This post contains no matching images.", ephemeral=True)
+            await ctx.send("This post contains no matching images.", ephemeral=True)
             return
         logger.debug(f"Found {len(attachments)} PNG attachments on message {message.id}")
 
@@ -154,7 +155,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
         tasks = await gather(*tasks)
         if not metadata:
             logger.debug(f"No metadata found in attachments for message {message.id}")
-            await ctx.edit_original_response(
+            await ctx.send(
                 f"This post contains no image generation data.\n{message.author.mention} needs to install [this extension](<https://github.com/neggles/sd-webui-stealth-pnginfo>)",
                 ephemeral=True,
             )

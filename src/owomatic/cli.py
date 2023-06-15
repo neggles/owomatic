@@ -14,7 +14,7 @@ from rich.pretty import install as install_pretty
 from rich.traceback import install as install_traceback
 
 import logsnake
-from owomatic import COGDIR_PATH, CONFIG_PATH, DATADIR_PATH, LOG_FORMAT, LOGDIR_PATH
+from owomatic import CONFIG_PATH, DATADIR_PATH, LOG_FORMAT, LOGDIR_PATH
 from owomatic.bot import Owomatic
 from owomatic.helpers.misc import parse_log_level
 
@@ -29,7 +29,7 @@ logging.root = logsnake.setup_logger(
     logfile=LOGDIR_PATH.joinpath(f"{__name__.split('.')[0]}-debug.log".replace("_", "-")),
     fileLoglevel=logging.DEBUG,
     maxBytes=1 * MBYTE,
-    backupCount=3,
+    backupCount=1,
 )
 # setup package logger
 logger = logsnake.setup_logger(
@@ -40,7 +40,16 @@ logger = logsnake.setup_logger(
     logfile=LOGDIR_PATH.joinpath(f"{__name__.split('.')[0]}.log".replace("_", "-")),
     fileLoglevel=logging.DEBUG,
     maxBytes=1 * MBYTE,
-    backupCount=3,
+    backupCount=1,
+)
+cog_logger = logsnake.setup_logger(
+    level=logging.INFO,
+    isRootLogger=False,
+    name="cogs",
+    logfile=LOGDIR_PATH.joinpath(f"{__name__.split('.')[0]}-cogs.log".replace("_", "-")),
+    fileLoglevel=logging.DEBUG,
+    maxBytes=1 * MBYTE,
+    backupCount=1,
 )
 
 # install rich traceback handler
