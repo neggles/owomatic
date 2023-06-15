@@ -9,9 +9,9 @@ import uvloop
 from daemonocle.cli import DaemonCLI
 
 import logsnake
-from owomatic.helpers.misc import parse_log_level
-from owomatic import LOGDIR_PATH, DATADIR_PATH, COGDIR_PATH, CONFIG_PATH, USERDATA_PATH
+from owomatic import COGDIR_PATH, CONFIG_PATH, DATADIR_PATH, LOGDIR_PATH, USERDATA_PATH
 from owomatic.bot import Owomatic
+from owomatic.helpers.misc import parse_log_level
 
 MBYTE = 2**20
 
@@ -23,8 +23,8 @@ logging.root = logsnake.setup_logger(
     formatter=logfmt,
     logfile=LOGDIR_PATH.joinpath(f"{__package__}_debug.log"),
     fileLoglevel=logging.DEBUG,
-    maxBytes=2 * MBYTE,
-    backupCount=5,
+    maxBytes=1 * MBYTE,
+    backupCount=3,
 )
 # setup package logger
 logger = logsnake.setup_logger(
@@ -34,8 +34,8 @@ logger = logsnake.setup_logger(
     formatter=logfmt,
     logfile=LOGDIR_PATH.joinpath(f"{__package__}.log"),
     fileLoglevel=logging.DEBUG,
-    maxBytes=2 * MBYTE,
-    backupCount=5,
+    maxBytes=1 * MBYTE,
+    backupCount=1,
 )
 
 bot: Owomatic = Owomatic()

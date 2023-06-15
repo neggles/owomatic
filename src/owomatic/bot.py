@@ -62,9 +62,6 @@ class Owomatic(commands.Bot):
         self.home_guild: Guild = None  # set in on_ready
         self.hide: bool = False
 
-        # thread pool for blocking code
-        self.executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="bot")
-
     @property
     def uptime(self) -> timedelta:
         return datetime.now(tz=ZoneInfo("UTC")) - self.start_time
@@ -72,85 +69,6 @@ class Owomatic(commands.Bot):
     @property
     def fuzzyuptime(self) -> str:
         return fuzzydelta(self.uptime)
-
-    async def do(self, func, *args, **kwargs):
-        funcname = getattr(func, "__name__", None)
-        if funcname is None:
-            funcname = getattr(func.__class__, "__name__", "unknown")
-        logger.info(f"Running {funcname} in background thread...")
-        return await self.loop.run_in_executor(self.executor, partial_func(func, *args, **kwargs))
-
-    def save_userdata(self):
-        if self.userdata is not None and self.userdata_path.is_file():
-            with self.userdata_path.open("w") as f:
-                json.dump(self.userdata, f, skipkeys=True, indent=2)
-            # logger.debug("Flushed user states to disk")
-
-    def load_userdata(self):
-        if self.userdata_path.is_file():
-            with self.userdata_path.open("r") as f:
-                self.userdata = json.load(f)
-            logger.debug("Loaded user states from disk")
-
-    # Get a user's entire data dict from the userdata dict
-    def _get_userdata(self, user: Member, default={}) -> dict:
-        return self.userdata.get(user.id, default)
-
-    # Set a user's entire data dict
-    def _set_userdata(self, user: Member, data: dict) -> None:
-        self.userdata[user.id] = data
-
-    # Get a specific key from a user's data dict
-    def get_userdata_key(self, user: Member, key: str, default=None):
-        userdata = self._get_userdata(user)
-        return userdata.get(key, default)
-
-    # Set a specific key in a user's data dict
-    def set_userdata_key(self, user: Member, key: str, value: str) -> None:
-        userdata = self._get_userdata(user)
-        userdata[key] = value
-        self._set_userdata(user, userdata)
-
-    def save_guild_metadata(self, guild_id: int):
-        # get guild metadata (members, channels, etc.)
-        guild = self.get_guild(guild_id)
-        guild_data = {
-            "id": guild.id,
-            "name": guild.name,
-            "member_count": guild.member_count,
-            "description": guild.description,
-            "created_at": guild.created_at.isoformat(),
-            "nsfw_level": guild.nsfw_level.name,
-            "members": [
-                {
-                    "id": member.id,
-                    "name": member.name,
-                    "discriminator": member.discriminator,
-                    "display_name": member.display_name,
-                    "avatar": str(member.avatar.url) if member.avatar else None,
-                    "is_bot": member.bot,
-                    "is_system": member.system,
-                }
-                for member in guild.members
-            ],
-            "channels": [
-                {
-                    "id": channel.id,
-                    "name": channel.name,
-                    "category": (
-                        {"id": channel.category_id, "name": channel.category.name} if channel.category else {}
-                    ),
-                    "position": channel.position,
-                }
-                for channel in guild.channels
-            ],
-        }
-
-        # save member_data
-        guild_data_path = self.datadir_path.joinpath("guilds", f"{guild_id}-meta.json")
-        guild_data_path.parent.mkdir(exist_ok=True, parents=True)
-        with guild_data_path.open("w") as f:
-            json.dump(guild_data, f, skipkeys=True, indent=2)
 
     def available_cogs(self):
         cogs = [
@@ -169,7 +87,7 @@ class Owomatic(commands.Bot):
                 try:
                     self.load_extension(f"cogs.{cog}")
                     logger.info(f"Loaded cog '{cog}'")
-                except Exception as e:
+                except Exception:
                     etype, exc, tb = sys.exc_info()
                     exception = f"{etype}: {exc}"
                     logger.error(f"Failed to load cog {cog}:\n{exception}")
@@ -188,21 +106,13 @@ class Owomatic(commands.Bot):
 
     @status_task.before_loop
     async def before_status_task(self):
-        if self.hide:
+        if self.hide is True:
             # no status task if we're hiding
             await self.change_presence(status=Status.invisible)
             self.status_task.cancel()
         else:
             print("waiting...")
             await self.wait_until_ready()
-
-    @tasks.loop(minutes=3.0)
-    async def userdata_task(self) -> None:
-        """
-        Background task to flush user state to disk
-        """
-        self.save_userdata()
-        logger.debug("Flushed userdata to disk")
 
     async def on_ready(self) -> None:
         """
@@ -226,11 +136,6 @@ class Owomatic(commands.Bot):
                 self.status_task.start()
         else:
             await self.change_presence(status=Status.invisible)
-
-        if not self.userdata_task.is_running():
-            if self.userdata is None:
-                self.load_userdata()
-            self.userdata_task.start()
 
     async def on_message(self, message: Message) -> None:
         if message.author == self.user or message.author.bot:

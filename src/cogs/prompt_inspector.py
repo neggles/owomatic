@@ -4,11 +4,8 @@ import json
 import logging
 from asyncio import gather
 from collections import OrderedDict
-from io import BytesIO
 from typing import List, Optional
 
-import logsnake
-from async_lru import alru_cache
 from disnake import (
     Attachment,
     ButtonStyle,
@@ -18,6 +15,7 @@ from disnake import (
     MessageInteraction,
     RawReactionActionEvent,
 )
+import logsnake
 from disnake.ext import commands
 from disnake.ui import Button, View, button
 from owomatic import DATADIR_PATH, LOG_FORMAT, LOGDIR_PATH
@@ -83,10 +81,11 @@ class PromptInspector(commands.Cog, name=COG_UID):
     @commands.Cog.listener("on_message")
     async def on_message(self, message: Message):
         # ignore bots and self
-        if message.author == self.bot.user:
+        if message.author.id == self.bot.user.id:
             return
         # monitor only channels in the config
         if message.channel.id in self.channel_ids and message.attachments:
+            logger.debug(f"Got message {message.id} from {message.author.id} with attachments...")
             for i, attachment in enumerate(message.attachments):
                 metadata = OrderedDict()
                 await read_attachment_metadata(i, attachment, metadata)
@@ -121,6 +120,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
             logger.debug("No metadata found.")
             return
 
+        attachment: Attachment
         dm_channel = await payload.member.create_dm()
         for attachment, data in [(message.attachments[i], data) for i, data in metadata.items()]:
             try:
@@ -165,6 +165,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
 
         dm_channel = await ctx.author.create_dm()
         first = True
+        attachment: Attachment
         for attachment, data in [(attachments[i], data) for i, data in metadata.items()]:
             try:
                 logger.debug(f"Parsing and sending metadata for attachment {attachment.filename}...")
@@ -292,6 +293,7 @@ def read_info_from_image_stealth(image: Image.Image):
                 decoded_data = gzip.decompress(bytes(byte_data)).decode("utf-8")
             else:
                 decoded_data = byte_data.decode("utf-8", errors="ignore")
+            logger.debug(f"Got metadata: {decoded_data}")
             return decoded_data
         except Exception as e:
             logger.exception(e)
@@ -326,12 +328,13 @@ def get_params_from_string(param_str: str) -> dict:
     return output_dict
 
 
-@alru_cache(maxsize=128)
 async def read_attachment_metadata(idx: int, attachment: Attachment, metadata: OrderedDict):
     """Allows downloading in bulk"""
+    logger.debug(f"Reading attachment metadata from {attachment}")
     try:
-        image_data = await attachment.read()
-        with Image.open(BytesIO(image_data)) as img:
+        image_data = await attachment.to_file()
+        logger.debug(f"Got file {image_data.filename}")
+        with Image.open(image_data.fp) as img:
             try:
                 info = img.info["parameters"]
             except Exception:
