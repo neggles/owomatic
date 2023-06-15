@@ -5,12 +5,14 @@ from asyncio import Lock
 from base64 import b64decode
 from io import BytesIO
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Dict, List, Optional
 
 import aiohttp
 from aiohttp import ClientSession
 from disnake import ApplicationCommandInteraction, File
 from disnake.ext import commands
+from humanize import naturaldelta as fuzzydelta
 from PIL import Image
 
 from cogs.imagen.settings import (
@@ -118,9 +120,11 @@ class Imagen(commands.Cog, name=COG_UID):
 
         # submit the request and save the image
         async with self._lock:
+            start_time = perf_counter()
             async with self.session.post("/sdapi/v1/txt2img", json=request) as r:
                 if r.status == 200:
                     response: dict = await r.json(encoding="utf-8")
+                    end_time = perf_counter()
                 else:
                     r.raise_for_status()
                 try:
@@ -137,6 +141,9 @@ class Imagen(commands.Cog, name=COG_UID):
                     image.info.update({"parameters": response["info"]})
                     # then decode it for logging purposes
                     response["info"] = json.loads(response["info"])
+
+                    # add the time taken to the response
+                    response["gen_duration"] = fuzzydelta(int(end_time - start_time))
 
                     # work out the path to save the image to, then save it and the job info
                     imagefile_path = IMAGEN_DATA_DIR.joinpath(
@@ -157,6 +164,7 @@ class Imagen(commands.Cog, name=COG_UID):
                     )
                     # this could return the image object, but we're saving it anyway and it's easier to
                     # load a disnake File() from a path, so, uh... memory leak prevention? :sweat_smile:
+
                     return imagefile_path, response
                 except Exception as e:
                     logger.exception("Error saving image")

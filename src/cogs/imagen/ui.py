@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 def response_to_fields(response: dict, model_name: str) -> dict:
     params: Dict = response["parameters"]
+    info: Dict = response["info"]
     return {
         "Model": model_name,
         "Prompt": params["prompt"],
@@ -28,7 +29,8 @@ def response_to_fields(response: dict, model_name: str) -> dict:
         "Steps": params["steps"],
         "CFG Scale": params["cfg_scale"],
         "Denoise": params["denoising_strength"],
-        "Seed": params["seed"],
+        "Seed": info["seed"],
+        "Duration": response["gen_duration"],
     }
 
 
