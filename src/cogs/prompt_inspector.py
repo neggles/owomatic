@@ -164,8 +164,6 @@ class PromptInspector(commands.Cog, name=COG_UID):
         if TRIGGER_EMOJI not in [x.emoji for x in ctx.target.reactions]:
             await ctx.target.add_reaction(TRIGGER_EMOJI)
 
-        dm_channel = await ctx.author.create_dm()
-        first = True
         attachment: Attachment
         for attachment, data in [(attachments[i], data) for i, data in metadata.items()]:
             try:
@@ -173,12 +171,12 @@ class PromptInspector(commands.Cog, name=COG_UID):
                 embed = dict2embed(get_params_from_string(data), message)
                 embed.set_image(url=attachment.url)
                 view = PromptView(metadata=metadata)
-                if first is True:
-                    await ctx.edit_original_response(embed=embed, view=view, ephemeral=True)
-                    first = False
-                await dm_channel.send(embed=embed, view=view, mention_author=False)
-            except ValueError:
-                pass
+                await ctx.author.send(embed=embed, view=view, mention_author=False)
+                await ctx.edit_original_response(content="Check your DMs.", ephemeral=True)
+            except ValueError as e:
+                await ctx.edit_original_response(content="Something went wrong, sorry!", ephemeral=True)
+                logger.exception("something broke while sending prompt info")
+                raise e
 
 
 def dict2embed(data: dict, context: Message) -> Embed:

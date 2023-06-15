@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     log_level: str = Field("INFO")
     debug: bool = Field(False)
     reload: bool = Field(False)
+    hide: bool = Field(False)
 
     status_type: str = Field("playing")
     statuses: List[str] = Field(["with your heart"])

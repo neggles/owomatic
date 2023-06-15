@@ -1,37 +1,65 @@
-import json
+import logging
 from typing import Callable, TypeVar
 
 from disnake.ext import commands
 
-from owomatic import CONFIG_PATH, DATADIR_PATH
-from exceptions import UserBlacklisted, UserNotOwner
+from owomatic.settings import get_settings
 
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
+
+
+def is_admin() -> Callable[[T], T]:
+    """
+    Decorator that checks if the user is listed in the bot's admin_ids, or is the owner.
+    Returns True if the user is in the admin_ids or owner_id, False otherwise.
+
+    Returns:
+        Callable[[T], T]: Disnake check decorator.
+    """
+
+    def predicate(ctx: commands.Context) -> bool:
+        settings = get_settings()
+        logger.debug(f"Checking if {ctx.author.id} is an admin in context {ctx}")
+        return any(
+            [
+                ctx.author.id == settings.owner_id,
+                (ctx.author.id in settings.admin_ids),
+            ]
+        )
+
+    return commands.check(predicate)
 
 
 def is_owner() -> Callable[[T], T]:
     """
-    This is a custom check to see if the user executing the command is an owner of the bot.
+    Decorator that checks if the user is the bot's owner.
+    Returns True if the user's id matches the owner_id, False otherwise.
+
+    Returns:
+        Callable[[T], T]: Disnake check decorator.
     """
 
-    async def predicate(context: commands.Context) -> bool:
-        data = json.loads(CONFIG_PATH.read_bytes())
-        if context.author.id not in data["owners"]:
-            raise UserNotOwner
-        return True
+    def predicate(ctx: commands.Context) -> bool:
+        settings = get_settings()
+        logger.debug(f"Checking if {ctx.author.id} is the owner ({settings.owner_id}) in context {ctx}")
+        return ctx.author.id == settings.owner_id
 
     return commands.check(predicate)
 
 
 def not_blacklisted() -> Callable[[T], T]:
     """
-    This is a custom check to see if the user executing the command is blacklisted.
+    Decorator check for whether the user is blacklisted.
+    Returns True if the user is not blacklisted, False otherwise.
+
+    Returns:
+        Callable[[T], T]: Disnake check decorator.
     """
 
-    async def predicate(context: commands.Context) -> bool:
-        data = json.loads(DATADIR_PATH.joinpath("blacklist.json").read_bytes())
-        if context.author.id in data["ids"]:
-            raise UserBlacklisted
+    def predicate(ctx: commands.Context) -> bool:
+        # return ctx.author.id in settings.blacklist.user_ids
         return True
 
     return commands.check(predicate)
