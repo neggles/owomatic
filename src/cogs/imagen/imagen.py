@@ -83,7 +83,7 @@ class Imagen(commands.Cog, name=COG_UID):
         negative: Optional[str] = commands.Param(description="what NOT want", max_length=200, default=""),
         aspect: ImageAspect = commands.Param(description="wide, square, tall?", default=ImageAspect.Square),
         steps: int = commands.Param(description="how much think", ge=1, le=50, default=25),
-        cfg: float = commands.Param(description="how hard think", ge=0.0, le=30.0, default=8.5),
+        cfg: float = commands.Param(description="how hard think", ge=0.0, le=30.0, default=9.5),
         model: ImagenModel = commands.Param(
             description="which brain",
             converter=convert_model,
@@ -99,13 +99,12 @@ class Imagen(commands.Cog, name=COG_UID):
         request = self.api.build_request(prompt, negative, steps, cfg, seed, denoise, aspect, model)
 
         image_path, response = await self.submit_request(ctx, request)
+        image_file = File(image_path)
 
-        embed = ImagenEmbed(
-            image=File(image_path), author=ctx.author, model_name=model.name, api_response=response
-        )
+        embed = ImagenEmbed(author=ctx.author, model_name=model.name, api_response=response)
         view = ImagenView(self.bot, ctx.author, model.name, request)
 
-        response_message = await ctx.edit_original_response(embed=embed, view=view)
+        response_message = await ctx.edit_original_response(embed=embed, view=view, file=image_file)
         if self.bot.get_cog("prompt-inspector") is not None:
             response_message.add_reaction("🔍")
 

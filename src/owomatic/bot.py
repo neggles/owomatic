@@ -7,7 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from functools import partial as partial_func
 from pathlib import Path
-from traceback import print_exception
+from shlex import join
+from traceback import format_exc, format_exception, print_exception
 from zoneinfo import ZoneInfo
 
 from disnake import (
@@ -191,11 +192,14 @@ class Owomatic(commands.Bot):
             else False
         )
 
+        exc_text = "\n".join(format_exception(error, limit=2))
+        exc_text = f"```\n{exc_text}\n```"
         embed = Embed(
             title="Error!",
-            description="An unknown error occurred while executing this command. Please try again later or contact the bot owner if the problem persists.",
+            description=f"An unknown error occurred while executing this command.:\n{exc_text}",
             color=0xE02B2B,
         )
+        embed.set_footer(text="sorry bb xoxo <3")
         await ctx.send(embed=embed, ephemeral=ctx_ephemeral)
 
         logger.warn(f"Unhandled error in slash command {ctx}: {error}")

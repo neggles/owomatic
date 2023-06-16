@@ -102,7 +102,7 @@ class ImagenModel(BaseModel):
 
 class ImagenApiParams(BaseModel):
     steps: int = 25
-    cfg_scale: float = 7.5
+    cfg_scale: float = ...
     vae: str = ...
     sampler_name: str = "DPM++ 2M Karras"
     enable_hr: bool = False

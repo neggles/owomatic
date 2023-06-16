@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 from disnake import (
     ButtonStyle,
@@ -37,17 +37,17 @@ def response_to_fields(response: dict, model_name: str) -> dict:
 class ImagenEmbed(Embed):
     def __init__(
         self,
-        image: File,
-        author: User | Member,
-        model_name: str,
-        api_response: dict,
+        image: Optional[File] = None,
+        author: User | Member = ...,
+        model_name: str = ...,
+        api_response: dict = ...,
         **kwargs,
     ):
         super().__init__(
             colour=author.colour if isinstance(author, Member) else Colour(0xFFD01C),
             **kwargs,
         )
-        logger.debug(f"Creating embed of {image.filename} for user {author.display_name} ({author.id})")
+        logger.debug(f"Creating embed for user {author.display_name} ({author.id})")
         try:
             if api_response is not None:
                 fields = response_to_fields(api_response, model_name)
@@ -57,7 +57,8 @@ class ImagenEmbed(Embed):
                     self.add_field(name="Negative", value=negative, inline=False)
                 for key, val in fields.items():
                     self.add_field(name=key, value=val, inline=True)
-            self.set_image(file=image)
+            if image is not None:
+                self.set_image(file=image)
             self.set_author(name=author.display_name, icon_url=author.display_avatar.url)
             self.set_footer(text="Powered by cursed python 😱🐍")
         except Exception as e:
@@ -94,7 +95,7 @@ class ImagenView(ui.View):
             logger.info(f"Retrying {COG_UID} generation for {ctx.author.display_name} ({ctx.author.id})")
             new_image, response = await self.cog.submit_request(ctx, self.request)
             new_image = File(new_image)
-            embed = ImagenEmbed(new_image, self.author, self.model_name, response)
+            embed = ImagenEmbed(author=self.author, model_name=self.model_name, api_response=response)
 
             # Update button state to reflect completion
             self.retry_button.label = "Complete"
@@ -102,7 +103,9 @@ class ImagenView(ui.View):
 
             # Send new message with new embed
             response_message = await ctx.followup.send(
-                embed=embed, view=ImagenView(self.bot, ctx.author, self.model_name, self.request)
+                embed=embed,
+                view=ImagenView(self.bot, ctx.author, self.model_name, self.request),
+                file=new_image,
             )
             if self.bot.get_cog("prompt-inspector") is not None:
                 response_message.add_reaction("🔍")

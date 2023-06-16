@@ -82,9 +82,6 @@ class PromptInspector(commands.Cog, name=COG_UID):
 
     @commands.Cog.listener("on_message")
     async def on_message(self, message: Message):
-        # ignore bots and self
-        if message.author.id == self.bot.user.id:
-            return
         # monitor only channels in the config
         if message.channel.id in self.channel_ids and message.attachments:
             logger.debug(f"Got message {message.id} from {message.author.id} with attachments...")
@@ -173,9 +170,9 @@ class PromptInspector(commands.Cog, name=COG_UID):
                 embed.set_image(url=attachment.url)
                 view = PromptView(metadata=metadata)
                 await ctx.author.send(embed=embed, view=view, mention_author=False)
-                await ctx.edit_original_response(content="Check your DMs.", ephemeral=True)
+                await ctx.send(content="Check your DMs.", ephemeral=True)
             except ValueError as e:
-                await ctx.edit_original_response(content="Something went wrong, sorry!", ephemeral=True)
+                await ctx.send(content="Something went wrong, sorry!", ephemeral=True)
                 logger.exception("something broke while sending prompt info")
                 raise e
 
