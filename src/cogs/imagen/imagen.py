@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 from aiohttp import ClientSession
-from disnake import ApplicationCommandInteraction, File
+from disnake import ApplicationCommandInteraction, ApplicationCommandPermissions, File, Permissions
 from disnake.ext import commands
 from humanize import naturaldelta as fuzzydelta
 from PIL import Image
@@ -76,7 +76,7 @@ class Imagen(commands.Cog, name=COG_UID):
 
     @commands.slash_command(name="imagen", description="Generate an image from text")
     @commands.cooldown(1, 15.0, commands.BucketType.user)
-    async def generate(
+    async def imagen_generate(
         self,
         ctx: ApplicationCommandInteraction,
         prompt: str = commands.Param(description="what want", max_length=200),
@@ -107,6 +107,23 @@ class Imagen(commands.Cog, name=COG_UID):
         response_message = await ctx.edit_original_response(embed=embed, view=view, file=image_file)
         if self.bot.get_cog("prompt-inspector") is not None:
             response_message.add_reaction("🔍")
+
+    @commands.slash_command(name="journey", description="Generate an image with OpenJourney")
+    @commands.cooldown(1, 15.0, commands.BucketType.user)
+    async def imagen_journey(
+        self,
+        ctx: ApplicationCommandInteraction,
+        prompt: str = commands.Param(description="what want", max_length=200),
+        negative: Optional[str] = commands.Param(description="what NOT want", max_length=200, default=""),
+        aspect: ImageAspect = commands.Param(description="wide, square, tall?", default=ImageAspect.Square),
+        steps: int = commands.Param(description="how much think", ge=1, le=50, default=25),
+        cfg: float = commands.Param(description="how hard think", ge=0.0, le=30.0, default=9.5),
+        denoise: float = commands.Param(description="do you like aliasing", ge=0.0, le=1.0, default=0.51),
+        seed: int = commands.Param(description="roll a d2147483646", ge=-1, le=0x7FFFFFFF, default=-1),
+    ):
+        return await self.imagen_generate(
+            ctx, prompt, negative, aspect, steps, cfg, convert_model(ctx, "openjourney-v2"), denoise, seed
+        )
 
     async def submit_request(
         self, ctx: ApplicationCommandInteraction = ..., request: Dict[str, Any] = ...

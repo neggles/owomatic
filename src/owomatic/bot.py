@@ -200,7 +200,7 @@ class Owomatic(commands.Bot):
             color=0xE02B2B,
         )
         embed.set_footer(text="sorry bb xoxo <3")
-        await ctx.send(embed=embed, ephemeral=ctx_ephemeral)
+        await ctx.send(embed=embed, ephemeral=ctx_ephemeral, delete_after=30.0)
 
         logger.warn(f"Unhandled error in slash command {ctx}: {error}")
         raise error
