@@ -159,8 +159,12 @@ class PromptInspector(commands.Cog, name=COG_UID):
             return
 
         # Add the magnifying glass reaction if it's not there
-        if TRIGGER_EMOJI not in [x.emoji for x in ctx.target.reactions]:
-            await ctx.target.add_reaction(TRIGGER_EMOJI)
+        target_emoji = [x.emoji for x in ctx.target.reactions]
+        if not any([TRIGGER_EMOJI in str(x) for x in target_emoji]):
+            try:
+                await ctx.target.add_reaction(TRIGGER_EMOJI)
+            except Exception as e:
+                logger.exception("Failed to add reaction to message")
 
         attachment: Attachment
         for attachment, data in [(attachments[i], data) for i, data in metadata.items()]:
