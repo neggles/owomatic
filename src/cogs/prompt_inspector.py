@@ -4,6 +4,7 @@ import logging
 from asyncio import gather
 from collections import OrderedDict
 from functools import lru_cache
+from io import BytesIO
 from typing import List, Optional
 
 from disnake import (
@@ -126,7 +127,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
                 logger.debug(f"Parsing and sending metadata for attachment {attachment.filename}...")
                 embed = dict2embed(get_params_from_string(data), message)
                 embed.set_image(url=attachment.url)
-                view = PromptView(metadata=metadata)
+                view = PromptView(metadata=data)
                 await dm_channel.send(embed=embed, view=view, mention_author=False)
             except ValueError:
                 pass
@@ -305,6 +306,13 @@ def read_info_from_image_stealth(image: Image.Image):
 @lru_cache(maxsize=128)
 def get_params_from_string(param_str: str) -> dict:
     logger.debug(f"Parsing parameters from string: {param_str}")
+    try:
+        param_dict = json.loads(param_str)
+        param_str = param_dict["infotexts"]
+
+    except json.JSONDecodeError:
+        pass
+
     output_dict = {}
     parts = param_str.split("Steps: ")
     prompts = parts[0]
@@ -333,15 +341,19 @@ async def read_attachment_metadata(idx: int, attachment: Attachment, metadata: O
     """Allows downloading in bulk"""
     logger.debug(f"Reading attachment metadata from {attachment}")
     try:
-        image_data = await attachment.to_file()
-        logger.debug(f"Got file {image_data.filename}")
-        with Image.open(image_data.fp) as img:
-            try:
-                info = img.info["parameters"]
-            except Exception:
+        image_data = await attachment.read()
+        logger.debug(f"Got file {attachment.filename}")
+        with Image.open(BytesIO(image_data)) as img:
+            logger.debug("Loading metadata from PNG text chunk")
+            info: str = img.info.get("parameters", None)
+            if info is None:
+                logger.debug("No metadata found, trying to read from pixel data")
                 info = read_info_from_image_stealth(img)
-            if info and "Steps" in info:
-                metadata[idx] = info
+            if info is None:
+                raise ValueError("No metadata found")
+            if "Steps" not in info:
+                raise ValueError("Invalid metadata")
+            metadata[idx] = info
     except Exception as e:
         logger.error(f"{type(e).__name__}: {e}")
 
