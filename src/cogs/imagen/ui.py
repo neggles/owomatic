@@ -12,7 +12,6 @@ from disnake import (
     User,
     ui,
 )
-from disnake.ext import commands
 
 from owomatic.bot import Owomatic
 
@@ -20,18 +19,22 @@ COG_UID = "imagen"
 logger = logging.getLogger(__name__)
 
 
-def response_to_fields(response: dict, model_name: str) -> dict:
+def response_to_fields(response: dict) -> dict:
     params: Dict = response["parameters"]
     info: Dict = response["info"]
     return {
-        "Model": model_name,
-        "Prompt": params["prompt"],
-        "Negative": params["negative_prompt"],
-        "Steps": params["steps"],
-        "CFG Scale": params["cfg_scale"],
-        "Denoise": params["denoising_strength"],
+        "Prompt": info["prompt"],
+        "Negative": info["negative_prompt"],
+        "Sampler": info["sampler_name"],
+        "Width": info["width"],
+        "Height": info["height"],
+        "Runtime": response["gen_duration"],
+        "Steps": info["steps"],
+        "CFG Scale": info["cfg_scale"],
         "Seed": info["seed"],
-        "Duration": response["gen_duration"],
+        "HR Steps": params["hr_second_pass_steps"],
+        "HR Denoise": info["denoising_strength"],
+        "CLIP Skip": info["clip_skip"],
     }
 
 
@@ -51,13 +54,19 @@ class ImagenEmbed(Embed):
         logger.debug(f"Creating embed for user {author.display_name} ({author.id})")
         try:
             if api_response is not None:
-                fields = response_to_fields(api_response, model_name)
-                self.description = fields.pop("Prompt", ":shrug:")
+                fields = response_to_fields(api_response)
+                self.description = f"**{model_name}** ({fields.pop('Sampler')})"
+
+                prompt = fields.pop("Prompt", "")
+                if len(prompt) > 0:
+                    self.add_field(name="Prompt", value=prompt, inline=False)
+
                 negative = fields.pop("Negative", "")
                 if len(negative) > 0:
                     self.add_field(name="Negative", value=negative, inline=False)
+
                 for key, val in fields.items():
-                    self.add_field(name=key, value=val, inline=True)
+                    self.add_field(name=key, value=val, inline=False if key == "Model" else True)
             if image is not None:
                 self.set_image(file=image)
             self.set_author(name=author.display_name, icon_url=author.display_avatar.url)

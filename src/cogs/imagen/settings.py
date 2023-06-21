@@ -82,7 +82,7 @@ class ImagenModel(BaseModel):
     enabled: bool = Field(True)
     name: str = Field(...)
     id: str = Field(...)
-    kind: str = Field("")
+    kind: str = Field("waifu")
     checkpoint: Optional[str] = Field(None)
     vae: Optional[str] = Field(None)
     tags: List[str] = Field([])

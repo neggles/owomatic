@@ -201,7 +201,8 @@ class Imagen(commands.Cog, name=COG_UID):
                     )
                     # this could return the image object, but we're saving it anyway and it's easier to
                     # load a disnake File() from a path, so, uh... memory leak prevention? :sweat_smile:
-
+                    logger.debug(f"Saved image to {imagefile_path}")
+                    logger.debug(f"Response data: {json.dumps(response, ensure_ascii=False)}")
                     return imagefile_path, response
                 except Exception as e:
                     logger.exception("Error saving image")
