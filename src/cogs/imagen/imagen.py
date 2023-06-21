@@ -8,9 +8,8 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Dict, List, Optional
 
-import aiohttp
 from aiohttp import ClientSession
-from disnake import ApplicationCommandInteraction, ApplicationCommandPermissions, File, Permissions
+from disnake import ApplicationCommandInteraction, File
 from disnake.ext import commands
 from humanize import naturaldelta as fuzzydelta
 from PIL import Image
@@ -41,15 +40,20 @@ def convert_model(ctx: ApplicationCommandInteraction, model_name: str) -> Imagen
     cog: "Imagen" = ctx.bot.get_cog(COG_UID)
     if model_name is None:
         return cog.config.default_model
-    return next(iter([x for x in cog.config.models if x.name == model_name]), cog.config.default_model)
+    model_name = model_name.lower()
+    return next(
+        iter([x for x in cog.config.models if model_name in [x.id.lower(), x.name.lower()]]),
+        cog.config.default_model,
+    )
 
 
 def autocomp_models(ctx: ApplicationCommandInteraction, input: str) -> List[str]:
     cog: "Imagen" = ctx.bot.get_cog(COG_UID)
+    input = input.lower()
     return [
         x.name
         for x in cog.config.models
-        if (len(input) < 3) or (x.name.lower().startswith(input.lower())) or (input.lower() in x.name.lower())
+        if (len(input) < 3) or (x.name.lower().startswith(input)) or (input in x.name.lower())
     ]
 
 
@@ -123,6 +127,23 @@ class Imagen(commands.Cog, name=COG_UID):
     ):
         return await self.imagen_generate(
             ctx, prompt, negative, aspect, steps, cfg, convert_model(ctx, "openjourney-v2"), denoise, seed
+        )
+
+    @commands.slash_command(name="waifu", description="Generate an image with Andromeda")
+    @commands.cooldown(1, 15.0, commands.BucketType.user)
+    async def imagen_waifu(
+        self,
+        ctx: ApplicationCommandInteraction,
+        prompt: str = commands.Param(description="what want", max_length=200),
+        negative: Optional[str] = commands.Param(description="what NOT want", max_length=200, default=""),
+        aspect: ImageAspect = commands.Param(description="wide, square, tall?", default=ImageAspect.Square),
+        steps: int = commands.Param(description="tick tock", ge=1, le=50, default=25),
+        cfg: float = commands.Param(description="hmmm", ge=0.0, le=30.0, default=7.75),
+        denoise: float = commands.Param(description="do you like aliasing", ge=0.0, le=1.0, default=0.51),
+        seed: int = commands.Param(description="roll a d2147483646", ge=-1, le=0x7FFFFFFF, default=-1),
+    ):
+        return await self.imagen_generate(
+            ctx, prompt, negative, aspect, steps, cfg, convert_model(ctx, "AndromedaDX"), denoise, seed
         )
 
     async def submit_request(

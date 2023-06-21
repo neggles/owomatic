@@ -82,9 +82,11 @@ class ImagenModel(BaseModel):
     enabled: bool = Field(True)
     name: str = Field(...)
     id: str = Field(...)
+    kind: str = Field("")
     checkpoint: Optional[str] = Field(None)
     vae: Optional[str] = Field(None)
     tags: List[str] = Field([])
+    tag_pos: str = Field("start")
     negative: List[str] = Field([])
     clip_skip: int = Field(2)
     overrides: Optional[dict] = None
@@ -96,7 +98,10 @@ class ImagenModel(BaseModel):
 
     def get_prompt(self, prompt: str):
         if len(self.tags) > 0:
-            return ", ".join([*self.tags, prompt])
+            if self.tag_pos == "start":
+                return ", ".join([*self.tags, prompt])
+            elif self.tag_pos == "end":
+                return ", ".join([prompt, *self.tags])
         return prompt
 
 

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Dict, Optional, Union
 
@@ -118,3 +119,14 @@ class ImagenView(ui.View):
         finally:
             await ctx.edit_original_response(view=self)
             return
+
+    @ui.button(label="Delete", style=ButtonStyle.red)
+    async def delete_button(self, button: ui.Button, ctx: MessageInteraction) -> None:
+        await ctx.response.defer()
+        self.retry_button.disabled = True
+        self.delete_button.disabled = True
+        self.delete_button.label = "Deleting..."
+        self.delete_button.style = ButtonStyle.grey
+        await ctx.message.edit(view=self)
+        await ctx.message.delete(delay=1.0)
+        await ctx.send("Message queued for deletion.", ephemeral=True, delete_after=30)
