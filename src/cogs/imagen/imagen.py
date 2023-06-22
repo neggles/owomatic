@@ -87,7 +87,7 @@ class Imagen(commands.Cog, name=COG_UID):
         negative: Optional[str] = commands.Param(description="what NOT want", max_length=200, default=""),
         aspect: ImageAspect = commands.Param(description="wide, square, tall?", default=ImageAspect.Square),
         steps: int = commands.Param(description="how much think", ge=1, le=50, default=25),
-        cfg: float = commands.Param(description="how hard think", ge=0.0, le=30.0, default=9.5),
+        cfg: float = commands.Param(description="how hard think", ge=0.0, le=30.0, default=7.5),
         model: ImagenModel = commands.Param(
             description="which brain",
             converter=convert_model,
@@ -95,7 +95,7 @@ class Imagen(commands.Cog, name=COG_UID):
             default=None,
             convert_defaults=True,
         ),
-        denoise: float = commands.Param(description="do you like aliasing", ge=0.0, le=1.0, default=0.51),
+        denoise: float = commands.Param(description="do you like aliasing", ge=0.0, le=1.0, default=0.55),
         seed: int = commands.Param(description="roll a d2147483646", ge=-1, le=0x7FFFFFFF, default=-1),
     ):
         await ctx.response.defer()
@@ -121,8 +121,8 @@ class Imagen(commands.Cog, name=COG_UID):
         negative: Optional[str] = commands.Param(description="what NOT want", max_length=200, default=""),
         aspect: ImageAspect = commands.Param(description="wide, square, tall?", default=ImageAspect.Square),
         steps: int = commands.Param(description="how much think", ge=1, le=50, default=25),
-        cfg: float = commands.Param(description="how hard think", ge=0.0, le=30.0, default=9.5),
-        denoise: float = commands.Param(description="do you like aliasing", ge=0.0, le=1.0, default=0.51),
+        cfg: float = commands.Param(description="how hard think", ge=0.0, le=30.0, default=7.5),
+        denoise: float = commands.Param(description="do you like aliasing", ge=0.0, le=1.0, default=0.55),
         seed: int = commands.Param(description="roll a d2147483646", ge=-1, le=0x7FFFFFFF, default=-1),
     ):
         return await self.imagen_generate(
@@ -139,11 +139,28 @@ class Imagen(commands.Cog, name=COG_UID):
         aspect: ImageAspect = commands.Param(description="wide, square, tall?", default=ImageAspect.Square),
         steps: int = commands.Param(description="tick tock", ge=1, le=50, default=25),
         cfg: float = commands.Param(description="hmmm", ge=0.0, le=30.0, default=7.75),
-        denoise: float = commands.Param(description="do you like aliasing", ge=0.0, le=1.0, default=0.51),
+        denoise: float = commands.Param(description="do you like aliasing", ge=0.0, le=1.0, default=0.6),
         seed: int = commands.Param(description="roll a d2147483646", ge=-1, le=0x7FFFFFFF, default=-1),
     ):
         return await self.imagen_generate(
             ctx, prompt, negative, aspect, steps, cfg, convert_model(ctx, "AndromedaDX"), denoise, seed
+        )
+
+    @commands.slash_command(name="niji", description="Generate an image with OpenNiji")
+    @commands.cooldown(1, 15.0, commands.BucketType.user)
+    async def imagen_niji(
+        self,
+        ctx: ApplicationCommandInteraction,
+        prompt: str = commands.Param(description="what want", max_length=200),
+        negative: Optional[str] = commands.Param(description="what NOT want", max_length=200, default=""),
+        aspect: ImageAspect = commands.Param(description="wide, square, tall?", default=ImageAspect.Square),
+        steps: int = commands.Param(description="tick tock", ge=10, le=50, default=25),
+        cfg: float = commands.Param(description="hmmm", ge=0.0, le=30.0, default=7.6),
+        denoise: float = commands.Param(description="do you like aliasing", ge=0.0, le=1.0, default=0.55),
+        seed: int = commands.Param(description="roll a d2147483646", ge=-1, le=0x7FFFFFFF, default=-1),
+    ):
+        return await self.imagen_generate(
+            ctx, prompt, negative, aspect, steps, cfg, convert_model(ctx, "OpenNiji"), denoise, seed
         )
 
     async def submit_request(

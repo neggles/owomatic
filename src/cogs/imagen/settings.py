@@ -88,8 +88,9 @@ class ImagenModel(BaseModel):
     tags: List[str] = Field([])
     tag_pos: str = Field("start")
     negative: List[str] = Field([])
+    sampler_name: Optional[str] = Field(None)
     clip_skip: int = Field(2)
-    overrides: Optional[dict] = None
+    overrides: Optional[dict] = Field({})
 
     def get_negative(self, prompt: str):
         if len(self.negative) > 0:
@@ -150,7 +151,7 @@ class ImagenApiParams(BaseModel):
             "n_iter": 1,
             "send_images": True,
             "save_images": True,
-            "sampler_name": self.sampler_name,
+            "sampler_name": model.sampler_name or self.sampler_name,
             "enable_hr": int(self.enable_hr),
             "hr_scale": 1.5,
             "hr_second_pass_steps": self.hr_steps,
