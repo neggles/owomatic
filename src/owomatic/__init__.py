@@ -21,3 +21,5 @@ DATADIR_PATH = PACKAGE_ROOT.parent.joinpath("data")
 CONFIG_PATH = DATADIR_PATH.joinpath("config.json")
 BLACKLIST_PATH = DATADIR_PATH.joinpath("blacklist.json")
 MISCDATA_PATH = DATADIR_PATH.joinpath("misc")
+
+DAEMON_PATH = DATADIR_PATH.joinpath("daemon")

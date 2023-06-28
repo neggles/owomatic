@@ -3,7 +3,6 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 import click
 import daemonocle
@@ -14,7 +13,7 @@ from rich.pretty import install as install_pretty
 from rich.traceback import install as install_traceback
 
 import logsnake
-from owomatic import CONFIG_PATH, DATADIR_PATH, LOG_FORMAT, LOGDIR_PATH
+from owomatic import CONFIG_PATH, DAEMON_PATH, DATADIR_PATH, LOG_FORMAT, LOGDIR_PATH
 from owomatic.bot import Owomatic
 from owomatic.helpers.misc import parse_log_level
 
@@ -75,7 +74,7 @@ class BotDaemon(FHSDaemon):
     @daemonocle.expose_action
     @click.argument("name")
     @click.pass_context
-    def reload_cog(self, ctx: click.Context, name: str):
+    def reload_cog(self, ctx: click.Context, name: str) -> None:
         """**BROKEN!** Unload a cog (if loaded) then load it."""
         bot = ctx.obj.bot if hasattr(ctx.obj, "bot") else None
         if bot is None:
@@ -92,6 +91,22 @@ class BotDaemon(FHSDaemon):
             logger.error(f"Could not find module {name} in cog dir")
         bot.load_extension(cog_module)
 
+    @daemonocle.expose_action
+    def gen_unit_file(self) -> None:
+        """
+        Generate a systemd service unit file.
+        """
+        from owomatic.helpers.systemd import RestartPolicy, service_unit
+
+        unit_file = Path.cwd().joinpath(__name__.split(".")[0] + ".service")
+        if unit_file.exists():
+            raise FileExistsError(f"Unit file {unit_file} already exists, delete it first")
+        else:
+            print(f"Generating systemd service unit file: {unit_file}")
+            unit = service_unit(restart_policy=RestartPolicy.OnFailure)
+            unit_file.write_text(unit, encoding="utf-8")
+            print("Done.")
+
 
 @click.command(
     cls=DaemonCLI,
@@ -99,7 +114,7 @@ class BotDaemon(FHSDaemon):
     daemon_params={
         "name": "owomatic",
         "shutdown_callback": cb_shutdown,
-        "prefix": CONFIG_PATH.parent.joinpath("daemon"),
+        "prefix": DAEMON_PATH,
         "log_prefix": "owomatic-",
         "stop_timeout": 60,
     },
@@ -109,14 +124,12 @@ class BotDaemon(FHSDaemon):
 def cli(daemon: BotDaemon):
     """
     owomatic discord bot CLI service controller.
-
-    pass --config <name> to use a specific configuration file / data dir suffix.
     """
 
     logger.info(f"Config path: {CONFIG_PATH}")
     logger.info(f"DATADIR_PATH: {DATADIR_PATH}")
     logger.info(f"LOGDIR_PATH: {LOGDIR_PATH}")
-    logger.info(f"Daemon data path: {CONFIG_PATH.parent.joinpath('daemon')}")
+    logger.info(f"Daemon data path: {DAEMON_PATH}")
     return start_bot(daemon)
 
 
