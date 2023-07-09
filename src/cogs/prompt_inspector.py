@@ -5,12 +5,14 @@ from asyncio import gather
 from collections import OrderedDict
 from functools import lru_cache
 from io import BytesIO
+from pathlib import Path
 from typing import List, Optional
 
 from disnake import (
     Attachment,
     ButtonStyle,
     Embed,
+    File,
     Message,
     MessageCommandInteraction,
     MessageInteraction,
@@ -46,9 +48,10 @@ logger.propagate = True
 
 
 class PromptView(View):
-    def __init__(self, metadata: str, timeout: float = 3600.0):
+    def __init__(self, metadata: str, filename: Optional[str] = None, timeout: float = 3600.0):
         super().__init__(timeout=timeout)
         self.metadata: Optional[str] = metadata
+        self.filename: Optional[str] = filename
 
     @button(label="Raw Metadata", style=ButtonStyle.blurple, custom_id=f"{COG_UID}:raw_metadata")
     async def details(self, button: Button, ctx: MessageInteraction):
@@ -59,8 +62,14 @@ class PromptView(View):
             button.style = ButtonStyle.green
 
             if len(self.metadata) > 1980:
-                for i in range(0, len(self.metadata), 1980):
-                    await ctx.send(f"```csv\n{self.metadata[i:i+1980]}```")
+                metafile_name = (
+                    Path(self.filename).with_suffix(".txt").name
+                    if self.filename is not None
+                    else "metadata.txt"
+                )
+                metadata_file = BytesIO(self.metadata.encode("utf-8"))
+                attachment = File(metadata_file, filename=metafile_name)
+                await ctx.send(content="Metadata won't fit in message, see attached file", file=attachment)
             else:
                 await ctx.send(f"```csv\n{self.metadata}```")
 
@@ -127,7 +136,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
                 logger.debug(f"Parsing and sending metadata for attachment {attachment.filename}...")
                 embed = dict2embed(get_params_from_string(data), message)
                 embed.set_image(url=attachment.url)
-                view = PromptView(metadata=data)
+                view = PromptView(metadata=data, filename=attachment.filename)
                 await dm_channel.send(embed=embed, view=view, mention_author=False)
             except ValueError:
                 pass
