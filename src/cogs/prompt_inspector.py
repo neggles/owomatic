@@ -30,7 +30,6 @@ COG_UID = "prompt-inspector"
 
 CONFIG_FILE = DATADIR_PATH / f"{COG_UID}.json"
 
-# TRIGGER_EMOJI = "📝"
 TRIGGER_EMOJI = "🔎"
 
 # setup cog logger
