@@ -67,7 +67,7 @@ class JsonConfig(BaseConfig):
         )
 
 
-class Settings(BaseSettings):
+class BotSettings(BaseSettings):
     app_id: int = Field(...)
     bot_token: str = Field(...)
     permissions: int = Field(1642253970515)
@@ -99,8 +99,8 @@ class Settings(BaseSettings):
 
 
 @lru_cache(maxsize=1)
-def get_settings(config_path: Optional[Path] = None) -> Settings:
+def get_settings(config_path: Optional[Path] = None) -> BotSettings:
     if config_path is None:
         config_path = DATADIR_PATH.joinpath("config.json")
-    settings = Settings(json_config_path=config_path)
+    settings = BotSettings(json_config_path=config_path)
     return settings

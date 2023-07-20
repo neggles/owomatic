@@ -5,30 +5,25 @@ from asyncio import gather
 from collections import OrderedDict
 from functools import lru_cache
 from io import BytesIO
-from pathlib import Path
-from typing import List, Optional
 
 from disnake import (
     Attachment,
-    ButtonStyle,
     Embed,
-    File,
     Message,
     MessageCommandInteraction,
-    MessageInteraction,
     RawReactionActionEvent,
 )
 from disnake.ext import commands
-from disnake.ui import Button, View, button
 from PIL import Image
 
 import logsnake
-from owomatic import DATADIR_PATH, LOG_FORMAT, LOGDIR_PATH
+from cogs.prompt_inspector.settings import get_inspector_settings
+from cogs.prompt_inspector.ui import PromptView
+from owomatic import LOG_FORMAT, LOGDIR_PATH
 from owomatic.bot import Owomatic
+from owomatic.settings import ChannelSettings
 
 COG_UID = "prompt-inspector"
-
-CONFIG_FILE = DATADIR_PATH / f"{COG_UID}.json"
 
 TRIGGER_EMOJI = "🔎"
 
@@ -46,53 +41,23 @@ logger = logsnake.setup_logger(
 logger.propagate = True
 
 
-class PromptView(View):
-    def __init__(self, metadata: str, filename: Optional[str] = None, timeout: float = 3600.0):
-        super().__init__(timeout=timeout)
-        self.metadata: Optional[str] = metadata
-        self.filename: Optional[str] = filename
-
-    @button(label="Raw Metadata", style=ButtonStyle.blurple, custom_id=f"{COG_UID}:raw_metadata")
-    async def details(self, button: Button, ctx: MessageInteraction):
-        await ctx.response.defer()
-        try:
-            button.disabled = True
-            button.label = "✅ Done"
-            button.style = ButtonStyle.green
-
-            if len(self.metadata) > 1980:
-                metafile_name = (
-                    Path(self.filename).with_suffix(".txt").name
-                    if self.filename is not None
-                    else "metadata.txt"
-                )
-                metadata_file = BytesIO(self.metadata.encode("utf-8"))
-                attachment = File(metadata_file, filename=metafile_name)
-                await ctx.send(content="Metadata won't fit in message, see attached file", file=attachment)
-            else:
-                await ctx.send(f"```csv\n{self.metadata}```")
-
-        except Exception as e:
-            await ctx.followup.send(f"Sending details failed: {e}")
-            button.disabled = True
-            button.label = "❌ Failed"
-            button.style = ButtonStyle.red
-            logger.error(e)
-        finally:
-            await ctx.edit_original_response(view=self)
-            return
-
-
 class PromptInspector(commands.Cog, name=COG_UID):
-    def __init__(self, bot):
+    def __init__(self, bot) -> None:
         self.bot: Owomatic = bot
-        config_dict = json.loads(CONFIG_FILE.read_text())
-        self.channel_ids: List[int] = config_dict.get("channel_ids", [])
+        self.config = get_inspector_settings()
+
+    @property
+    def channel_settings(self) -> list[ChannelSettings]:
+        return [channel for guild in self.config.guilds for channel in guild.channels]
+
+    @property
+    def enabled_channel_ids(self) -> list[int]:
+        return [channel.id for channel in self.channel_settings if channel.enabled]
 
     @commands.Cog.listener("on_message")
     async def on_message(self, message: Message):
         # monitor only channels in the config
-        if message.channel.id in self.channel_ids and message.attachments:
+        if message.channel.id in self.enabled_channel_ids and message.attachments:
             logger.debug(f"Got message {message.id} from {message.author.id} with attachments...")
             for i, attachment in enumerate(message.attachments):
                 metadata = OrderedDict()

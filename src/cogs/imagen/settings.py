@@ -39,45 +39,6 @@ def get_image_size(aspect: ImageAspect) -> Tuple[int, int]:
         raise ValueError(f"Invalid aspect ratio: {aspect}")
 
 
-class NamedSnowflake(BaseModel):
-    id: int = Field(...)
-    name: str = Field("")  # not actually used, just here so it can be in config
-    note: Optional[str] = Field(None)
-
-
-class PermissionList(BaseModel):
-    users: List[NamedSnowflake] = Field([])
-    roles: List[NamedSnowflake] = Field([])
-
-    @property
-    def user_ids(self) -> List[int]:
-        return [x.id for x in self.users]
-
-    @property
-    def role_ids(self) -> List[int]:
-        return [x.id for x in self.roles]
-
-
-class ChannelSettings(NamedSnowflake):
-    enabled: bool = Field(True)
-
-
-class GuildSettings(NamedSnowflake):
-    enabled: bool = Field(True)
-    channels: List[ChannelSettings] = Field(default_factory=list)
-
-    def channel_enabled(self, channel_id: int) -> bool:
-        """
-        Returns whether the bot should respond to messages in this channel,
-        based on the guild's default setting and the channel's settings.
-        """
-        if self.enabled is False:
-            return False  # guild is disabled, don't respond
-        if channel_id in [x.id for x in self.channels if x.enabled is True]:
-            return True  # channel is explicitly enabled
-        return self.enabled  # guild default
-
-
 class ImagenModel(BaseModel):
     enabled: bool = Field(True)
     name: str = Field(...)
