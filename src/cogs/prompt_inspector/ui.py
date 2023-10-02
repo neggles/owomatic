@@ -27,7 +27,7 @@ class PromptView(View):
             button.label = "✅ Done"
             button.style = ButtonStyle.green
 
-            if len(self.metadata) > 1980:
+            if len(self.metadata) > 1750:
                 metafile_name = (
                     Path(self.filename).with_suffix(".txt").name
                     if self.filename is not None
