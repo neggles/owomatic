@@ -35,12 +35,21 @@ class PromptView(View):
                 )
                 metadata_file = BytesIO(self.metadata.encode("utf-8"))
                 attachment = File(metadata_file, filename=metafile_name)
-                await ctx.send(content="Metadata won't fit in message, see attached file", file=attachment)
+                await ctx.send(
+                    content=f"Raw metadata over Discord message size limit, attached as `{metafile_name}` instead",
+                    file=attachment,
+                )
             else:
                 await ctx.send(f"```csv\n{self.metadata}```")
 
         except Exception as e:
-            await ctx.followup.send(f"Sending details failed: {e}")
+            err_str = f"{e}"
+            if len(err_str) > 1750:
+                err_str = f"\n```{err_str[:1750]}\n```\n❌ **Error was truncated (too long)!**"
+            else:
+                err_str = f"\n```{err_str}\n```"
+
+            await ctx.followup.send(f"Sending raw metadata failed! Error details: {err_str}")
             button.disabled = True
             button.label = "❌ Failed"
             button.style = ButtonStyle.red
