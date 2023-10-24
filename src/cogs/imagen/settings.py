@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple
 from pydantic import BaseModel, BaseSettings, Field
 
 from owomatic import DATADIR_PATH
-from owomatic.settings import JsonConfig
+from owomatic.settings import GuildSettingsList, JsonConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -140,11 +140,12 @@ class ImagenApiParams(BaseModel):
 
 
 class ImagenSettings(BaseSettings):
-    enabled: bool = Field(True)
+    enabled: bool = Field(False)
     api_host: str = Field(...)
     api_params: ImagenApiParams = Field(...)
     models: List[ImagenModel] = Field(...)
     default_model_id: str = Field(...)
+    guilds: GuildSettingsList = Field([])
 
     @property
     def default_model(self):
