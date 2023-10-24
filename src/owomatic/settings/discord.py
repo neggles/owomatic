@@ -80,6 +80,10 @@ class GuildSettingsList(BaseModel):
     def guild_ids(self) -> List[int]:
         return [x.id for x in self]
 
+    @property
+    def enabled_ids(self) -> list[int]:
+        return [x.id for x in self if x.enabled is True]
+
     def get_id(self, guild_id: int) -> Optional[GuildSettings]:
         for guild in self.__root__:
             if guild.id == guild_id:
