@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "guilds": [
+    {
+      "name": "someguild",
+      "id": 79695932840938,
+      "enabled": false,
+      "channels": [
+        {
+          "id": 42345235,
+          "name": "wafdasd",
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}
