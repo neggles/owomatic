@@ -5,6 +5,7 @@ from asyncio import gather
 from collections import OrderedDict
 from functools import lru_cache
 from io import BytesIO
+from pathlib import Path
 
 from disnake import (
     Attachment,
@@ -26,6 +27,7 @@ from owomatic.settings import ChannelSettings
 COG_UID = "prompt-inspector"
 
 TRIGGER_EMOJI = "🔎"
+IMAGE_EXTNS = [".jpg", ".jpeg", ".png", ".webp", ".tiff", ".gif"]
 
 # setup cog logger
 logger = logsnake.setup_logger(
@@ -86,6 +88,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
         tasks = [
             read_attachment_metadata(i, attachment, metadata)
             for i, attachment in enumerate(message.attachments)
+            if Path(attachment.filename).suffix.lower() in IMAGE_EXTNS
         ]
         logger.debug(f"Fetching metadata for {len(tasks)} attachments...")
         tasks = await gather(*tasks)
@@ -122,6 +125,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
         tasks = [
             read_attachment_metadata(i, attachment, metadata)
             for i, attachment in enumerate(message.attachments)
+            if Path(attachment.filename).suffix.lower() in IMAGE_EXTNS
         ]
         tasks = await gather(*tasks)
         if not metadata:
