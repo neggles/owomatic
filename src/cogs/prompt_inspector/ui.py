@@ -14,10 +14,17 @@ logger = logging.getLogger(__name__)
 
 
 class PromptView(View):
-    def __init__(self, metadata: str, filename: Optional[str] = None, timeout: float = 3600.0):
+    def __init__(
+        self,
+        metadata: str,
+        filename: Optional[str] = None,
+        truncated: bool = False,
+        timeout: float = 3600.0,
+    ):
         super().__init__(timeout=timeout)
         self.metadata: Optional[str] = metadata
         self.filename: Optional[str] = filename
+        self.truncated = truncated
 
     @button(label="Raw Metadata", style=ButtonStyle.blurple, custom_id="prompt_inspector:raw_metadata")
     async def details(self, button: Button, ctx: MessageInteraction):

@@ -6,6 +6,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
+from re import M
 
 from disnake import (
     Attachment,
@@ -28,6 +29,7 @@ COG_UID = "prompt-inspector"
 
 TRIGGER_EMOJI = "🔎"
 IMAGE_EXTNS = [".jpg", ".jpeg", ".png", ".webp", ".tiff", ".gif"]
+MAX_FIELDS = 24
 
 # setup cog logger
 logger = logsnake.setup_logger(
@@ -101,11 +103,13 @@ class PromptInspector(commands.Cog, name=COG_UID):
         for attachment, data in [(message.attachments[i], data) for i, data in metadata.items()]:
             try:
                 logger.debug(f"Parsing and sending metadata for attachment {attachment.filename}...")
-                embed = dict2embed(get_params_from_string(data), message)
+                params, truncated = get_params_from_string(data)
+                embed = dict2embed(params, message, truncated)
                 embed.set_image(url=attachment.url)
                 view = PromptView(metadata=data, filename=attachment.filename)
-                await dm_channel.send(embed=embed, view=view, mention_author=False)
+                await dm_channel.send(embed=embed, view=view)
             except ValueError:
+                logger.exception("failed somewhere in the send")
                 pass
 
     @commands.message_command(name="Inspect Prompt", dm_permission=True)
@@ -148,7 +152,8 @@ class PromptInspector(commands.Cog, name=COG_UID):
         for attachment, data in [(attachments[i], data) for i, data in metadata.items()]:
             try:
                 logger.debug(f"Parsing and sending metadata for attachment {attachment.filename}...")
-                embed = dict2embed(get_params_from_string(data), message)
+                params, truncated = get_params_from_string(data)
+                embed = dict2embed(params, message, truncated)
                 embed.set_image(url=attachment.url)
                 view = PromptView(metadata=metadata)
                 await ctx.author.send(embed=embed, view=view, mention_author=False)
@@ -159,10 +164,12 @@ class PromptInspector(commands.Cog, name=COG_UID):
                 raise e
 
 
-def dict2embed(data: dict, context: Message) -> Embed:
+def dict2embed(data: dict, context: Message, truncated: bool = False) -> Embed:
     embed = Embed(color=context.author.color)
     for key, val in data.items():
         embed.add_field(name=key, value=f"`{val}`", inline="Prompt" not in key)
+    if truncated:
+        embed.add_field(name="Too many parameters!", value="Can't display all in embed!", inline=False)
     embed.set_footer(text=f"Posted by {context.author}", icon_url=context.author.display_avatar.url)
     return embed
 
@@ -281,16 +288,17 @@ def read_info_from_image_stealth(image: Image.Image):
 
 
 @lru_cache(maxsize=128)
-def get_params_from_string(param_str: str) -> dict:
+def get_params_from_string(param_str: str) -> tuple[dict, bool]:
     logger.debug(f"Parsing parameters from string: {param_str}")
     try:
         param_dict = json.loads(param_str)
         param_str = param_dict["infotexts"]
-
     except json.JSONDecodeError:
         pass
 
     output_dict = {}
+    truncated = False
+
     parts = param_str.split("Steps: ")
     prompts = parts[0]
     params = "Steps: " + parts[1]
@@ -303,15 +311,21 @@ def get_params_from_string(param_str: str) -> dict:
         output_dict["Prompt"] = prompts
     if len(output_dict["Prompt"]) > 1000:
         output_dict["Prompt"] = output_dict["Prompt"][:1000] + "..."
+
     params = params.split(", ")
     for param in params:
+        if len(output_dict.keys()) >= MAX_FIELDS:
+            logger.debug("hit param count limit")
+            truncated = True
+            break
         try:
             key, value = param.split(": ")
             output_dict[key] = value
         except ValueError:
             pass
+
     logger.debug(f"got {len(output_dict.keys())} params, returning...")
-    return output_dict
+    return output_dict, truncated
 
 
 async def read_attachment_metadata(idx: int, attachment: Attachment, metadata: OrderedDict):
