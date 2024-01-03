@@ -43,12 +43,15 @@
             "source.organizeImports": "explicit"
         }
     },
-    "ruff.lint.args": ["--line-length=110", "--extend-ignore=F401,F841,E501"],
-    "ruff.format.args": ["--line-length=110", "--extend-ignore=F401,F841,E501"],
+    "ruff.lint.run": "onType",
+    "ruff.lint.args": ["--line-length=110"],
+    "ruff.format.args": ["--line-length=110"],
     "ruff.fixAll": true,
     "ruff.organizeImports": true,
+    "ruff.importStrategy": "fromEnvironment",
 
     "black-formatter.args": ["--line-length=110"],
+    "black-formatter.importStrategy": "fromEnvironment",
     "python.analysis.diagnosticMode": "openFilesOnly",
     "python.analysis.autoFormatStrings": true,
     "python.analysis.fixAll": ["source.convertImportFormat"],
@@ -57,14 +60,7 @@
         "**/__pycache__",
         "**/.venv"
     ],
-    "python.linting.enabled": false,
-    "python.linting.flake8Enabled": false,
-    "python.linting.mypyEnabled": false,
-    "python.linting.pylintEnabled": false,
-    "python.linting.flake8Args": [
-        "--config=${workspaceFolder}/setup.cfg",
-        "--max-line-length=110"
-    ],
+
     "autoDocstring.docstringFormat": "sphinx",
     "autoDocstring.startOnNewLine": false,
 
