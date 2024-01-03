@@ -111,7 +111,7 @@ def read_info_from_image_stealth(image: Image.Image):
                 decoded_data = gzip.decompress(bytes(byte_data)).decode("utf-8")
             else:
                 decoded_data = byte_data.decode("utf-8", errors="ignore")
-            logger.debug(f"Got metadata: {decoded_data}")
+            logger.debug(f"Found pixel-encoded metadata: {type(decoded_data)}={decoded_data}")
             return decoded_data
         except Exception as e:
             logger.exception(e)

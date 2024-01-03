@@ -4,7 +4,7 @@ from asyncio import gather
 from collections import OrderedDict
 from enum import Enum
 from functools import lru_cache
-from io import BytesIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Optional
 
@@ -20,8 +20,8 @@ from disnake.ext import commands
 from PIL import Image
 
 import logsnake
-from cogs.prompt_inspector.auto import read_info_from_image_stealth
 from cogs.prompt_inspector.settings import get_inspector_settings
+from cogs.prompt_inspector.stealth import read_info_from_image_stealth
 from cogs.prompt_inspector.ui import PromptView
 from owomatic import LOG_FORMAT, LOGDIR_PATH
 from owomatic.bot import Owomatic
@@ -124,8 +124,10 @@ class PromptInspector(commands.Cog, name=COG_UID):
                     await dm_channel.send(embed=embed, view=view)
                 elif kind in [MetadataType.ComfyUI, MetadataType.NovelAI]:
                     embed = get_embed(kind.name, message, {}, attachment.url, False)
-                    meta_file = File(data.encode("utf-8"))
-                    await dm_channel.send(embed=embed, view=view, mention_author=False, file=meta_file)
+                    meta_file = File(StringIO(data), "parameters.json")
+                    view = PromptView(metadata=meta_file, filename=attachment.filename)
+                    await dm_channel.send(embed=embed, view=view, mention_author=False)
+                    await dm_channel.send(file=meta_file)
                 else:
                     logger.warning(f"Got unknown metadata kind: {kind} - what?")
 
@@ -177,14 +179,18 @@ class PromptInspector(commands.Cog, name=COG_UID):
                 if kind == MetadataType.Automatic1111:
                     params, truncated = get_params_from_string(data)
                     embed = get_embed(kind.name, message, params, attachment.url, truncated)
-                    view = PromptView(metadata=metadata, filename=attachment.filename)
+                    view = PromptView(metadata=params, filename=attachment.filename)
                     await ctx.author.send(embed=embed, view=view, mention_author=False)
-                    await ctx.send(content="Check your DMs.", ephemeral=True)
+                    await ctx.send(embed=embed, view=view, ephemeral=True)
                 elif kind in [MetadataType.ComfyUI, MetadataType.NovelAI]:
                     embed = get_embed(kind.name, message, {}, attachment.url, False)
-                    meta_file = File(data.encode("utf-8"))
-                    await ctx.author.send(embed=embed, view=view, mention_author=False, file=meta_file)
-                    await ctx.send(content="Check your DMs.", ephemeral=True)
+                    meta_file = File(StringIO(data), "parameters.json")
+                    view = PromptView(metadata=meta_file, filename=attachment.filename)
+                    await ctx.author.send(embed=embed, view=view, mention_author=False)
+                    await ctx.author.send(file=meta_file)
+                    await ctx.send(
+                        content="found non-AUTOMATIC1111 metadata - check your DMs.", ephemeral=True
+                    )
                 else:
                     logger.warning(f"Got unknown metadata kind: {kind} - what?")
             except ValueError as e:
@@ -200,19 +206,22 @@ def get_embed(
     image_url: Optional[str] = None,
     truncated: bool = False,
 ) -> Embed:
+    logger.debug("Generating embed...")
     if title is not None:
-        title = f"{title} Parameters"
-    embed = Embed(
-        title=title,
-        color=context.author.color,
-    )
+        embed = Embed(title=f"{title} Parameters", color=context.author.color)
+    else:
+        embed = Embed(color=context.author.color)
+
     embed.set_footer(text=f"Posted by {context.author}", icon_url=context.author.display_avatar.url)
     if image_url is not None:
         embed.set_image(url=image_url)
     for key, val in params.items():
         embed.add_field(name=key, value=f"`{val}`", inline="Prompt" not in key)
     if truncated:
+        logger.debug("Embed was truncated (too many params)")
         embed.add_field(name="Too many parameters!", value="Can't display all in embed!", inline=False)
+
+    logger.debug("Embed generated")
     return embed
 
 
@@ -257,12 +266,28 @@ def get_params_from_string(param_str: str) -> tuple[dict, bool]:
     return output_dict, truncated
 
 
-def read_info_from_metadata(image: Image.Image) -> Optional[str]:
+def read_info_from_metadata(image: Image.Image) -> Optional[str | dict]:
     logger.debug("Trying metadata load from PNG text chunk or JPEG EXIF")
-    return image.info.get("parameters", None)
+
+    if info := image.info.get("parameters", None):
+        logger.debug("Found 'parameters' key")
+        return info
+    if info := image.info.get("prompt", None):
+        logger.debug("Found 'prompt' key")
+        return info
+    if "NovelAI" in image.info.get("Software", None):
+        logger.debug("Found 'Software' key (NAI)")
+        return image.info.copy()
+    logger.debug("No data found in PNG/JPEG metadata")
+    return None
 
 
-def get_meta_type(info: str) -> Optional[MetadataType]:
+def get_meta_type(info: str | dict) -> Optional[MetadataType]:
+    if isinstance(info, dict):
+        if "NovelAI" in info.get("Software", ""):
+            logger.debug("Found NovelAI metadata")
+            return MetadataType.NovelAI
+
     for kind in MetadataType:
         if kind.value in info:
             logger.debug(f"Found {kind.name} metadata")
@@ -284,22 +309,28 @@ async def read_attachment_metadata(
     ]
 
     logger.debug(f"Trying to read attachment metadata from {attachment}")
-    info_str: Optional[str]
+    info: Optional[str] = None
     try:
         image_data = await attachment.read()
         logger.debug(f"Got file {attachment.filename}")
         with Image.open(BytesIO(image_data)) as img:
             for func in CHECK_FUNCS:
-                if (info_str := func(img)) is not None:
+                info = func(img)
+                if info is not None:
                     break
-            if info_str is None:
+            if info is None:
                 raise ValueError("No metadata found")
-            if (meta_type := get_meta_type(info_str)) is None:
+            if (meta_type := get_meta_type(info)) is None:
                 raise ValueError("Did not find a known metadata type.")
 
-            metadata[idx] = meta_type, info_str
+            if isinstance(info, dict):
+                # special handling ig
+                info["Comment"] = json.loads(info["Comment"])
+                info = json.dumps(info, indent=2, ensure_ascii=False, skipkeys=True, default=str)
+            metadata[idx] = meta_type, info
     except Exception:
         logger.exception(f"Error while processing {attachment}")
+        pass
 
 
 def setup(bot):

@@ -16,13 +16,13 @@ logger = logging.getLogger(__name__)
 class PromptView(View):
     def __init__(
         self,
-        metadata: str,
+        metadata: str | File,
         filename: Optional[str] = None,
         truncated: bool = False,
         timeout: float = 3600.0,
     ):
         super().__init__(timeout=timeout)
-        self.metadata: Optional[str] = metadata
+        self.metadata: Optional[str | File] = metadata
         self.filename: Optional[str] = filename
         self.truncated = truncated
 
@@ -34,7 +34,10 @@ class PromptView(View):
             button.label = "✅ Done"
             button.style = ButtonStyle.green
 
-            if len(self.metadata) > 1750:
+            if isinstance(self.metadata, File):
+                await ctx.send(content="Attaching metadata file...", file=self.metadata)
+
+            elif len(self.metadata) > 1750:
                 metafile_name = (
                     Path(self.filename).with_suffix(".txt").name
                     if self.filename is not None
