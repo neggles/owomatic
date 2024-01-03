@@ -1,16 +1,17 @@
-import gzip
 import json
 import logging
 from asyncio import gather
 from collections import OrderedDict
+from enum import Enum
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
-from re import M
+from typing import Optional
 
 from disnake import (
     Attachment,
     Embed,
+    File,
     Message,
     MessageCommandInteraction,
     RawReactionActionEvent,
@@ -19,23 +20,28 @@ from disnake.ext import commands
 from PIL import Image
 
 import logsnake
+from cogs.prompt_inspector.auto import read_info_from_image_stealth
 from cogs.prompt_inspector.settings import get_inspector_settings
 from cogs.prompt_inspector.ui import PromptView
 from owomatic import LOG_FORMAT, LOGDIR_PATH
 from owomatic.bot import Owomatic
 from owomatic.settings import ChannelSettings
 
-COG_UID = "prompt-inspector"
+COG_UID = "prompt_inspector"
 
 TRIGGER_EMOJI = "🔎"
 IMAGE_EXTNS = [".jpg", ".jpeg", ".png", ".webp", ".tiff", ".gif"]
 MAX_FIELDS = 24
+MAX_SCAN_BYTES = 80 * 2**20
+
+# get parent package name for base logger name
+log_name = ".".join(__name__.split(".")[:-1])
 
 # setup cog logger
 logger = logsnake.setup_logger(
     level=logging.DEBUG,
     isRootLogger=False,
-    name=__name__,
+    name=log_name,
     formatter=logsnake.LogFormatter(fmt=LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S"),
     logfile=LOGDIR_PATH.joinpath(f"{COG_UID}.log"),
     fileLoglevel=logging.DEBUG,
@@ -43,6 +49,12 @@ logger = logsnake.setup_logger(
     backupCount=2,
 )
 logger.propagate = True
+
+
+class MetadataType(str, Enum):
+    Automatic1111 = "Steps:"
+    ComfyUI = '"inputs"'
+    NovelAI = "NovelAI"
 
 
 class PromptInspector(commands.Cog, name=COG_UID):
@@ -63,7 +75,8 @@ class PromptInspector(commands.Cog, name=COG_UID):
         # monitor only channels in the config
         if message.channel.id in self.enabled_channel_ids and message.attachments:
             logger.debug(f"Got message {message.id} from {message.author.id} with attachments...")
-            for i, attachment in enumerate(message.attachments):
+            attachments = [x for x in message.attachments if Path(x.filename).suffix.lower() in IMAGE_EXTNS]
+            for i, attachment in enumerate(attachments):
                 metadata = OrderedDict()
                 await read_attachment_metadata(i, attachment, metadata)
                 if len(metadata.keys()) > 0:
@@ -86,7 +99,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
             f"Got reaction on message {payload.message_id} with {len(message.attachments)} attachments."
         )
 
-        metadata = OrderedDict()
+        metadata: OrderedDict[int, tuple[MetadataType, str]] = OrderedDict()
         tasks = [
             read_attachment_metadata(i, attachment, metadata)
             for i, attachment in enumerate(message.attachments)
@@ -100,14 +113,22 @@ class PromptInspector(commands.Cog, name=COG_UID):
 
         attachment: Attachment
         dm_channel = await payload.member.create_dm()
-        for attachment, data in [(message.attachments[i], data) for i, data in metadata.items()]:
+        for attachment, (kind, data) in [(message.attachments[i], data) for i, data in metadata.items()]:
             try:
                 logger.debug(f"Parsing and sending metadata for attachment {attachment.filename}...")
-                params, truncated = get_params_from_string(data)
-                embed = dict2embed(params, message, truncated)
-                embed.set_image(url=attachment.url)
-                view = PromptView(metadata=data, filename=attachment.filename)
-                await dm_channel.send(embed=embed, view=view)
+
+                if kind == MetadataType.Automatic1111:
+                    params, truncated = get_params_from_string(data)
+                    embed = get_embed(kind.name, message, params, attachment.url, truncated)
+                    view = PromptView(metadata=metadata, filename=attachment.filename)
+                    await dm_channel.send(embed=embed, view=view)
+                elif kind in [MetadataType.ComfyUI, MetadataType.NovelAI]:
+                    embed = get_embed(kind.name, message, {}, attachment.url, False)
+                    meta_file = File(data.encode("utf-8"))
+                    await dm_channel.send(embed=embed, view=view, mention_author=False, file=meta_file)
+                else:
+                    logger.warning(f"Got unknown metadata kind: {kind} - what?")
+
             except ValueError:
                 logger.exception("failed somewhere in the send")
                 pass
@@ -125,7 +146,7 @@ class PromptInspector(commands.Cog, name=COG_UID):
             return
         logger.debug(f"Found {len(attachments)} PNG attachments on message {message.id}")
 
-        metadata = OrderedDict()
+        metadata: OrderedDict[int, tuple[MetadataType, str]] = OrderedDict()
         tasks = [
             read_attachment_metadata(i, attachment, metadata)
             for i, attachment in enumerate(message.attachments)
@@ -149,142 +170,50 @@ class PromptInspector(commands.Cog, name=COG_UID):
                 logger.exception("Failed to add reaction to message")
 
         attachment: Attachment
-        for attachment, data in [(attachments[i], data) for i, data in metadata.items()]:
+        for attachment, (kind, data) in [(attachments[i], data) for i, data in metadata.items()]:
             try:
                 logger.debug(f"Parsing and sending metadata for attachment {attachment.filename}...")
-                params, truncated = get_params_from_string(data)
-                embed = dict2embed(params, message, truncated)
-                embed.set_image(url=attachment.url)
-                view = PromptView(metadata=metadata)
-                await ctx.author.send(embed=embed, view=view, mention_author=False)
-                await ctx.send(content="Check your DMs.", ephemeral=True)
+
+                if kind == MetadataType.Automatic1111:
+                    params, truncated = get_params_from_string(data)
+                    embed = get_embed(kind.name, message, params, attachment.url, truncated)
+                    view = PromptView(metadata=metadata, filename=attachment.filename)
+                    await ctx.author.send(embed=embed, view=view, mention_author=False)
+                    await ctx.send(content="Check your DMs.", ephemeral=True)
+                elif kind in [MetadataType.ComfyUI, MetadataType.NovelAI]:
+                    embed = get_embed(kind.name, message, {}, attachment.url, False)
+                    meta_file = File(data.encode("utf-8"))
+                    await ctx.author.send(embed=embed, view=view, mention_author=False, file=meta_file)
+                    await ctx.send(content="Check your DMs.", ephemeral=True)
+                else:
+                    logger.warning(f"Got unknown metadata kind: {kind} - what?")
             except ValueError as e:
                 await ctx.send(content="Something went wrong, sorry!", ephemeral=True)
                 logger.exception("something broke while sending prompt info")
                 raise e
 
 
-def dict2embed(data: dict, context: Message, truncated: bool = False) -> Embed:
-    embed = Embed(color=context.author.color)
-    for key, val in data.items():
+def get_embed(
+    title: Optional[str] = None,
+    context: Message = ...,
+    params: dict = {},
+    image_url: Optional[str] = None,
+    truncated: bool = False,
+) -> Embed:
+    if title is not None:
+        title = f"{title} Parameters"
+    embed = Embed(
+        title=title,
+        color=context.author.color,
+    )
+    embed.set_footer(text=f"Posted by {context.author}", icon_url=context.author.display_avatar.url)
+    if image_url is not None:
+        embed.set_image(url=image_url)
+    for key, val in params.items():
         embed.add_field(name=key, value=f"`{val}`", inline="Prompt" not in key)
     if truncated:
         embed.add_field(name="Too many parameters!", value="Can't display all in embed!", inline=False)
-    embed.set_footer(text=f"Posted by {context.author}", icon_url=context.author.display_avatar.url)
     return embed
-
-
-def read_info_from_image_stealth(image: Image.Image):
-    # trying to read stealth pnginfo
-    width, height = image.size
-    pixels = image.load()
-
-    has_alpha = True if image.mode == "RGBA" else False
-    mode = None
-    compressed = False
-    binary_data = ""
-    buffer_a = ""
-    buffer_rgb = ""
-    index_a = 0
-    index_rgb = 0
-    sig_confirmed = False
-    confirming_signature = True
-    reading_param_len = False
-    reading_param = False
-    read_end = False
-    for x in range(width):
-        for y in range(height):
-            if has_alpha:
-                r, g, b, a = pixels[x, y]
-                buffer_a += str(a & 1)
-                index_a += 1
-            else:
-                r, g, b = pixels[x, y]
-            buffer_rgb += str(r & 1)
-            buffer_rgb += str(g & 1)
-            buffer_rgb += str(b & 1)
-            index_rgb += 3
-            if confirming_signature:
-                if index_a == len("stealth_pnginfo") * 8:
-                    decoded_sig = bytearray(
-                        int(buffer_a[i : i + 8], 2) for i in range(0, len(buffer_a), 8)
-                    ).decode("utf-8", errors="ignore")
-                    if decoded_sig in {"stealth_pnginfo", "stealth_pngcomp"}:
-                        confirming_signature = False
-                        sig_confirmed = True
-                        reading_param_len = True
-                        mode = "alpha"
-                        if decoded_sig == "stealth_pngcomp":
-                            compressed = True
-                        buffer_a = ""
-                        index_a = 0
-                    else:
-                        read_end = True
-                        break
-                elif index_rgb == len("stealth_pnginfo") * 8:
-                    decoded_sig = bytearray(
-                        int(buffer_rgb[i : i + 8], 2) for i in range(0, len(buffer_rgb), 8)
-                    ).decode("utf-8", errors="ignore")
-                    if decoded_sig in {"stealth_rgbinfo", "stealth_rgbcomp"}:
-                        confirming_signature = False
-                        sig_confirmed = True
-                        reading_param_len = True
-                        mode = "rgb"
-                        if decoded_sig == "stealth_rgbcomp":
-                            compressed = True
-                        buffer_rgb = ""
-                        index_rgb = 0
-            elif reading_param_len:
-                if mode == "alpha":
-                    if index_a == 32:
-                        param_len = int(buffer_a, 2)
-                        reading_param_len = False
-                        reading_param = True
-                        buffer_a = ""
-                        index_a = 0
-                else:
-                    if index_rgb == 33:
-                        pop = buffer_rgb[-1]
-                        buffer_rgb = buffer_rgb[:-1]
-                        param_len = int(buffer_rgb, 2)
-                        reading_param_len = False
-                        reading_param = True
-                        buffer_rgb = pop
-                        index_rgb = 1
-            elif reading_param:
-                if mode == "alpha":
-                    if index_a == param_len:
-                        binary_data = buffer_a
-                        read_end = True
-                        break
-                else:
-                    if index_rgb >= param_len:
-                        diff = param_len - index_rgb
-                        if diff < 0:
-                            buffer_rgb = buffer_rgb[:diff]
-                        binary_data = buffer_rgb
-                        read_end = True
-                        break
-            else:
-                # impossible
-                read_end = True
-                break
-        if read_end:
-            break
-    if sig_confirmed and binary_data != "":
-        # Convert binary string to UTF-8 encoded text
-        byte_data = bytearray(int(binary_data[i : i + 8], 2) for i in range(0, len(binary_data), 8))
-        try:
-            if compressed:
-                decoded_data = gzip.decompress(bytes(byte_data)).decode("utf-8")
-            else:
-                decoded_data = byte_data.decode("utf-8", errors="ignore")
-            logger.debug(f"Got metadata: {decoded_data}")
-            return decoded_data
-        except Exception as e:
-            logger.exception(e)
-            pass
-    return None
 
 
 @lru_cache(maxsize=128)
@@ -328,25 +257,49 @@ def get_params_from_string(param_str: str) -> tuple[dict, bool]:
     return output_dict, truncated
 
 
-async def read_attachment_metadata(idx: int, attachment: Attachment, metadata: OrderedDict):
-    """Allows downloading in bulk"""
-    logger.debug(f"Reading attachment metadata from {attachment}")
+def read_info_from_metadata(image: Image.Image) -> Optional[str]:
+    logger.debug("Trying metadata load from PNG text chunk or JPEG EXIF")
+    return image.info.get("parameters", None)
+
+
+def get_meta_type(info: str) -> Optional[MetadataType]:
+    for kind in MetadataType:
+        if kind.value in info:
+            logger.debug(f"Found {kind.name} metadata")
+            return kind
+    return None
+
+
+async def read_attachment_metadata(
+    idx: int, attachment: Attachment, metadata: OrderedDict[int, tuple[MetadataType, str]]
+) -> None:
+    """Acquire ye metadata."""
+    if attachment.size > MAX_SCAN_BYTES:
+        logger.debug(f"Attachment size {attachment.size} bytes is above MAX_SCAN_BYTES")
+        return
+
+    CHECK_FUNCS = [
+        read_info_from_metadata,
+        read_info_from_image_stealth,
+    ]
+
+    logger.debug(f"Trying to read attachment metadata from {attachment}")
+    info_str: Optional[str]
     try:
         image_data = await attachment.read()
         logger.debug(f"Got file {attachment.filename}")
         with Image.open(BytesIO(image_data)) as img:
-            logger.debug("Loading metadata from PNG text chunk")
-            info: str = img.info.get("parameters", None)
-            if info is None:
-                logger.debug("No metadata found, trying to read from pixel data")
-                info = read_info_from_image_stealth(img)
-            if info is None:
+            for func in CHECK_FUNCS:
+                if (info_str := func(img)) is not None:
+                    break
+            if info_str is None:
                 raise ValueError("No metadata found")
-            if "Steps" not in info:
-                raise ValueError("Invalid metadata")
-            metadata[idx] = info
-    except Exception as e:
-        logger.error(f"{type(e).__name__}: {e}")
+            if (meta_type := get_meta_type(info_str)) is None:
+                raise ValueError("Did not find a known metadata type.")
+
+            metadata[idx] = meta_type, info_str
+    except Exception:
+        logger.exception(f"Error while processing {attachment}")
 
 
 def setup(bot):

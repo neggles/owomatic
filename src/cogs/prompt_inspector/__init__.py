@@ -1,9 +1,8 @@
-from .prompt_inspector import PromptInspector, setup
-
-COG_UID = "prompt-inspector"
+from .common import COG_UID, MAX_SCAN_BYTES, PromptInspector, setup
 
 __all__ = [
     "COG_UID",
+    "MAX_SCAN_BYTES",
     "PromptInspector",
     "setup",
 ]
