@@ -16,6 +16,7 @@ OWO_JSON = Path(__file__).parent.joinpath("data", "owo.json")
 
 logger = logging.getLogger(__package__)
 
+# fmt: off
 NAVY_SEAL = [
     "What the fuck did you just fucking say about me, you little bitch?",
     "I'll have you know I graduated top of my class in the Navy Seals, and I've been involved in numerous secret raids on Al-Quaeda, and I have over ***300*** confirmed kills.",
@@ -45,6 +46,7 @@ NAVY_UWU = [
     "but uwu couwdn't, uwu didn't, awnd now uwu'we paying the pwice, uwu goddamn idiot. I wiww shit fuwy aww ovew u awnd uwu wiww dwown in iwt.",
     "✨·.·´¯\\`·.·✨  🎀 ***you'we fucking dead, kiddo.*** 🎀  ✨·.·\\`¯´·.·✨",
 ]
+# fmt: on
 
 
 class OwoVault:
